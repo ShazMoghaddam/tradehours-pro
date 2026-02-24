@@ -84,4 +84,4 @@ This EULA constitutes the entire agreement between you and the Licensor concerni
 
 ---
 
-*Copyright © 2025 Ethan Shahrooz Moghaddam. All rights reserved.*
+*Copyright © 2025 Ethan Shahrooz Moghaddam/TradeHour Pro. All rights reserved.*
