@@ -1,0 +1,2566 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>TradeHours</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0f1318;
+    --surface: #141c28;
+    --surface2: #192233;
+    --border: rgba(255,255,255,0.06);
+    --text: #e8edf5;
+    --muted: rgba(232,237,245,0.4);
+    --accent: #00d497;
+    --accent2: #008ff0;
+    --open: #00d497;
+    --closed: #ff4466;
+    --pre: #ffaa00;
+    --glow: rgba(0,212,151,0.15);
+  }
+  .light {
+    --bg: #eef2f7;
+    --surface: #e8edf4;
+    --surface2: #dde3ed;
+    --border: rgba(0,0,0,0.09);
+    --text: #0a1628;
+    --muted: rgba(10,22,40,0.45);
+    --accent: #00c48a;
+    --accent2: #0082d6;
+    --open: #00c48a;
+    --glow: rgba(0,196,138,0.08);
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family: 'Inter', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    transition: background 0.18s ease, color 0.18s ease;
+    overflow-x: hidden;
+  }
+  /* Smooth dark/light theme transition on all key elements */
+  *, *::before, *::after {
+    transition-property: background-color, border-color, box-shadow, color, opacity, filter;
+    transition-duration: 0.18s;
+    transition-timing-function: ease;
+  }
+  /* Override: motion-heavy transitions keep their own timing */
+  .market-card {
+    transition:
+      transform 0.5s cubic-bezier(0.34, 1.2, 0.64, 1),
+      box-shadow 0.6s ease,
+      border-color 0.6s ease,
+      opacity 0.5s ease,
+      filter 0.5s ease,
+      background-color 0.18s ease;
+  }
+  .orb, .save-toast, .markets-open-indicator, .markets-open-count, .markets-open-dot {
+    transition-duration: 0.18s;
+  }
+
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image:
+      linear-gradient(rgba(0,229,160,0.025) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,229,160,0.025) 1px, transparent 1px);
+    background-size: 48px 48px;
+    pointer-events: none; z-index: 0;
+  }
+  .orb {
+    position: fixed; width: 600px; height: 600px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(0,229,160,0.055) 0%, transparent 70%);
+    top: -200px; right: -200px;
+    pointer-events: none; z-index: 0;
+    opacity: 0.35;
+    transition: opacity 2s ease;
+    /* No animation by default — markets are closed, keep it still */
+  }
+  /* Orb breathes only when a market is live */
+  .orb.orb-live {
+    opacity: 1;
+    animation: orbPulse 8s ease-in-out infinite;
+  }
+  @keyframes orbPulse {
+    0%,100% { transform: scale(1); opacity: 0.8; }
+    50%      { transform: scale(1.08); opacity: 1; }
+  }
+  .container {
+    position: relative; z-index: 1;
+    max-width: 1200px; margin: 0 auto;
+    padding: 12px 20px 48px;
+    /* Safe area insets for notched phones (iPhone X+) */
+    padding-left: max(20px, env(safe-area-inset-left));
+    padding-right: max(20px, env(safe-area-inset-right));
+    padding-bottom: max(48px, calc(48px + env(safe-area-inset-bottom)));
+  }
+  header {
+    display: flex; align-items: center;
+    justify-content: space-between;
+    margin-bottom: 24px; gap: 16px; flex-wrap: wrap;
+    padding-bottom: 20px;
+  }
+  .light header {
+    border-bottom: 1px solid rgba(0,0,0,0.07);
+  }
+  .logo-mark {
+    font-family: 'Inter', sans-serif; font-weight: 700; font-size: 20px;
+    letter-spacing: -0.6px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+  }
+  .logo-sub {
+    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    color: var(--muted); letter-spacing: 1.5px; text-transform: uppercase; margin-top: 3px;
+  }
+  .controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .search-wrap {
+    position: relative; display: flex; align-items: center;
+    border-radius: 100px; border: 1px solid var(--border);
+    background: var(--surface);
+    transition: border-color 0.2s;
+    height: 34px;
+  }
+  .search-wrap:hover,
+  .search-wrap:focus-within { border-color: var(--accent); }
+  .search-icon {
+    position: absolute; left: 12px;
+    font-size: 15px; color: var(--muted); pointer-events: none; line-height: 1;
+    transition: color 0.2s;
+  }
+  .search-wrap:focus-within .search-icon { color: var(--accent); }
+  .search-input {
+    font-family: 'Inter', sans-serif; font-size: 12px; font-weight: 400;
+    height: 100%; padding: 0 0 0 34px;
+    border: none; background: transparent; color: var(--text);
+    outline: none; width: 150px;
+    transition: width 0.25s ease;
+  }
+  .search-input::placeholder { color: var(--muted); }
+  .search-input:focus { width: 190px; }
+  .search-add-btn {
+    height: 26px; width: 26px; margin-right: 4px; flex-shrink: 0;
+    border-radius: 50%; border: 1px solid var(--border);
+    background: var(--surface2); color: var(--muted);
+    cursor: pointer; font-size: 16px; line-height: 1;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.2s;
+  }
+  .search-add-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--glow); }
+  .search-add-divider {
+    width: 1px; height: 16px; background: var(--border);
+    margin: 0 4px; flex-shrink: 0;
+  }
+
+  .search-dropdown-divider { height: 1px; background: var(--border); margin: 4px 0; }
+
+  .pill-btn {
+    font-family: 'Inter', sans-serif; font-size: 12px; font-weight: 500;
+    padding: 7px 14px; border-radius: 100px;
+    border: 1px solid var(--border);
+    background: var(--surface); color: var(--muted);
+    cursor: pointer; transition: all 0.2s; letter-spacing: 0.3px;
+  }
+  .pill-btn:hover, .pill-btn.active {
+    border-color: var(--accent); color: var(--accent); background: var(--glow);
+  }
+  .pill-btn.active { font-weight: 600; }
+  .icon-btn {
+    width: 34px; height: 34px; border-radius: 50%;
+    border: 1px solid var(--border);
+    background: var(--surface); color: var(--text);
+    cursor: pointer; display: flex; align-items: center;
+    justify-content: center; font-size: 15px; transition: all 0.2s;
+  }
+  .icon-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .icon-btn.ambient-active { color: var(--accent); border-color: rgba(0,212,151,0.35); }
+
+  .local-time-display {
+    display: flex; flex-direction: column; align-items: flex-end;
+    border-left: 1px solid var(--border); padding-left: 16px; margin-left: 4px;
+  }
+  .light .local-time-display { border-color: rgba(0,0,0,0.09); }
+
+  .utc-strip {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 16px 24px; margin-bottom: 24px;
+    display: flex; align-items: center;
+    justify-content: space-between; flex-wrap: wrap; gap: 12px;
+  }
+  .utc-label { font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 1.5px; color: var(--muted); text-transform: uppercase; }
+  .utc-time {
+    font-family: 'JetBrains Mono', monospace; font-size: 26px; letter-spacing: 1.5px;
+    color: var(--accent);
+    line-height: 1;
+  }
+  .utc-date { font-size: 12px; color: var(--muted); font-weight: 400; letter-spacing: 0; line-height: 1.4; }
+
+  .session-bar-wrap {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 18px 22px; margin-bottom: 24px; overflow: hidden;
+  }
+  .session-bar-title { font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); font-family: 'JetBrains Mono', monospace; margin-bottom: 12px; }
+  .timeline { position: relative; height: 48px; background: var(--surface2); border-radius: 8px; overflow: hidden; }
+  .timeline-segment {
+    position: absolute; top: 4px; bottom: 4px; border-radius: 5px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px; font-weight: 600; letter-spacing: 0.8px;
+    color: rgba(0,0,0,0.85);
+    text-shadow: 0 0 8px rgba(255,255,255,0.35);
+    overflow: hidden; white-space: nowrap;
+    opacity: 0.92;
+  }
+  .light .timeline-segment { opacity: 0.85; text-shadow: none; color: rgba(0,0,0,0.78); }
+  .now-line {
+    position: absolute; top: 0; bottom: 0; width: 2px;
+    background: var(--accent);
+    box-shadow: 0 0 6px var(--accent), 0 0 12px rgba(0,212,151,0.4);
+    z-index: 5; transition: left 1s linear;
+  }
+  .timeline-hours { display: flex; justify-content: space-between; margin-top: 5px; padding: 0 2px; }
+  .timeline-hours span { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--muted); }
+
+  .edit-actions { display: flex; gap: 8px; }
+
+
+  /* GRID */
+  .markets-grid { display: grid; gap: 14px; }
+  .layout-grid    { grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
+  .layout-list    { grid-template-columns: 1fr; }
+  .layout-compact { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
+
+  /* CARD */
+  .market-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 18px; padding: 16px 20px;
+    position: relative; overflow: hidden;
+    transition:
+      transform 0.5s cubic-bezier(0.34, 1.2, 0.64, 1),
+      box-shadow 0.6s ease,
+      border-color 0.6s ease,
+      opacity 0.5s ease,
+      filter 0.5s ease;
+  }
+  .market-card:hover {
+    transform: translateY(-2px) scale(1.01); box-shadow: 0 10px 36px rgba(0,0,0,0.28);
+  }
+
+  /* Countdown seconds digit flip */
+  @keyframes digitFlip {
+    0%   { opacity: 1; transform: translateY(0); }
+    30%  { opacity: 0; transform: translateY(-4px); }
+    60%  { opacity: 0; transform: translateY(4px); }
+    100% { opacity: 1; transform: translateY(0); }
+  }
+  .cd-tick {
+    display: inline-block;
+    animation: digitFlip 0.35s ease;
+  }
+
+  /* OPEN — glow pulled back so logo gradient reads as primary hotspot */
+  .market-card.is-open {
+    border-color: transparent;
+    box-shadow:
+      0 0 0 1px rgba(0,229,160,0.28),
+      0 0 16px rgba(0,229,160,0.06),
+      0 0 40px rgba(0,229,160,0.03),
+      0 6px 24px rgba(0,0,0,0.28);
+    animation: cardBreath 3s ease-in-out infinite;
+  }
+  /* Lift open cards only on pointer devices with hover */
+  @media (hover: hover) {
+    .market-card.is-open { transform: translateY(-4px); }
+  }
+  @keyframes cardBreath {
+    0%,100% {
+      box-shadow:
+        0 0 0 1px rgba(0,229,160,0.28),
+        0 0 16px rgba(0,229,160,0.06),
+        0 0 40px rgba(0,229,160,0.03),
+        0 6px 24px rgba(0,0,0,0.28);
+    }
+    50% {
+      box-shadow:
+        0 0 0 1px rgba(0,229,160,0.46),
+        0 0 28px rgba(0,229,160,0.10),
+        0 0 56px rgba(0,229,160,0.05),
+        0 6px 24px rgba(0,0,0,0.28);
+    }
+  }
+  /* Ambient fill — single subtle radial, no dual competing sources */
+  .market-card.is-open::before {
+    content: ''; position: absolute; inset: 0; border-radius: inherit;
+    background: radial-gradient(ellipse at 0% 0%, rgba(0,229,160,0.04) 0%, transparent 60%);
+    pointer-events: none; z-index: 0;
+  }
+  /* Scanline sweep — pulled back opacity */
+  .market-card.is-open::after {
+    content: ''; position: absolute; left: 0; right: 0; height: 40%; top: -40%;
+    background: linear-gradient(180deg, transparent 0%, rgba(0,229,160,0.03) 50%, transparent 100%);
+    border-radius: inherit; pointer-events: none; z-index: 1;
+    animation: scanSweep 4.5s ease-in-out infinite;
+  }
+  @keyframes scanSweep {
+    0%   { top: -40%; opacity: 0; }
+    8%   { opacity: 1; }
+    92%  { opacity: 1; }
+    100% { top: 140%; opacity: 0; }
+  }
+
+  /* PRE */
+  .market-card.is-pre {
+    border-color: rgba(255,170,0,0.28);
+    box-shadow: 0 0 0 1px rgba(255,170,0,0.2), 0 0 16px rgba(255,170,0,0.07), 0 4px 18px rgba(0,0,0,0.28);
+  }
+  .market-card.is-pre::before {
+    content: ''; position: absolute; inset: 0; border-radius: inherit;
+    background: radial-gradient(ellipse at top left, rgba(255,170,0,0.06), transparent 60%);
+    pointer-events: none; z-index: 0;
+  }
+
+  .markets-grid.has-live .market-card.is-closed { opacity: 0.68; filter: saturate(0.75); }
+  .markets-grid.has-live .market-card.is-closed:hover { opacity: 1; filter: saturate(1); }
+
+  .light .market-card {
+    box-shadow: 0 1px 4px rgba(0,0,0,0.07), 0 4px 16px rgba(0,0,0,0.05);
+  }
+  .light .market-card.is-open {
+    box-shadow: 0 0 0 1px rgba(0,160,110,0.4), 0 0 14px rgba(0,160,110,0.07), 0 4px 16px rgba(0,0,0,0.06);
+    animation: cardBreathLight 3s ease-in-out infinite;
+  }
+  @keyframes cardBreathLight {
+    0%,100% { box-shadow: 0 0 0 1px rgba(0,160,110,0.4),  0 0 14px rgba(0,160,110,0.07), 0 4px 16px rgba(0,0,0,0.06); }
+    50%      { box-shadow: 0 0 0 1px rgba(0,160,110,0.6),  0 0 22px rgba(0,160,110,0.12), 0 4px 16px rgba(0,0,0,0.06); }
+  }
+
+  .market-card > * { position: relative; z-index: 2; }
+
+  /* LIVE BANNER */
+  .live-banner {
+    display: none; align-items: center; gap: 7px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px; font-weight: 600; letter-spacing: 1.5px;
+    color: var(--open); text-transform: uppercase; margin-bottom: 12px;
+  }
+  .is-open .live-banner { display: flex; }
+  .live-dot-wrap { position: relative; width: 8px; height: 8px; flex-shrink: 0; }
+  .live-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--open); animation: livePop 1.2s ease-in-out infinite;
+    box-shadow: 0 0 6px var(--open);
+  }
+  @keyframes livePop {
+    0%,100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.5); opacity: 0.55; }
+  }
+  .live-dot-wrap::before {
+    content: ''; position: absolute; inset: -4px; border-radius: 50%;
+    border: 1.5px solid var(--open); opacity: 0;
+    animation: ringPulse 1.2s ease-out infinite;
+  }
+  @keyframes ringPulse {
+    0%   { transform: scale(0.6); opacity: 0.8; }
+    100% { transform: scale(2.2); opacity: 0; }
+  }
+
+  .card-top { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 8px; }
+  .market-card:hover .card-top { padding-right: 28px; }
+  .market-flag {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    color: var(--muted);
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 3px 7px;
+    margin-bottom: 5px;
+    line-height: 1;
+    text-transform: uppercase;
+    width: fit-content;
+  }
+  .market-name {
+    font-family: 'Inter', sans-serif; font-weight: 500; font-size: 16px;
+    letter-spacing: -0.3px; line-height: 1.1; margin-top: 0;
+  }
+  .market-exchange {
+    font-size: 11px; color: var(--muted); margin-top: 3px;
+    letter-spacing: 1px; font-weight: 400;
+  }
+
+  .status-badge {
+    font-size: 9px; font-weight: 600;
+    letter-spacing: 1.5px; text-transform: uppercase;
+    padding: 4px 10px; border-radius: 100px; white-space: nowrap;
+    flex-shrink: 0;
+    align-self: flex-start;
+  }
+  .badge-open {
+    background: rgba(0,229,160,0.12);
+    color: var(--open);
+    box-shadow: 0 0 8px rgba(0,229,160,0.2);
+  }
+  .badge-closed {
+    background: rgba(255,68,102,0.08);
+    color: var(--closed);
+  }
+  .badge-pre {
+    background: rgba(255,170,0,0.1);
+    color: var(--pre);
+  }
+  .badge-holiday {
+    background: rgba(160,130,255,0.12);
+    color: #a082ff;
+    letter-spacing: 1.2px;
+  }
+  .is-holiday {
+    opacity: 0.6;
+    filter: saturate(0.5);
+  }
+  .is-holiday:hover { opacity: 0.85; filter: saturate(0.7); }
+  .holiday-note {
+    font-size: 10px; color: #a082ff;
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.5px; opacity: 0.85;
+  }
+
+  .card-local-time {
+    font-family: 'JetBrains Mono', monospace; font-size: 27px;
+    font-weight: 400; letter-spacing: 1px; line-height: 1; margin-bottom: 3px;
+  }
+  .card-tz {
+    font-size: 10px; color: var(--muted); letter-spacing: 1px;
+    font-family: 'JetBrains Mono', monospace; line-height: 1;
+  }
+
+  .card-countdown {
+    margin: 10px 0 0; padding: 9px 12px;
+    background: var(--surface2); border-radius: 10px; border: 1px solid var(--border);
+  }
+  .countdown-label {
+    font-size: 9px; letter-spacing: 1.5px; text-transform: uppercase;
+    color: var(--muted); margin-bottom: 3px; font-weight: 500;
+  }
+  .countdown-timer {
+    font-family: 'JetBrains Mono', monospace; font-size: 19px;
+    letter-spacing: 1px; font-weight: 400; line-height: 1;
+    font-variant-numeric: tabular-nums;
+    min-width: 7ch;
+  }
+  .countdown-phrase {
+    font-size: 11px; color: var(--muted); margin-top: 3px;
+    letter-spacing: 0; line-height: 1.3;
+  }
+  .timer-open   { color: var(--open); }
+  .timer-closed { color: var(--closed); }
+  .timer-pre    { color: var(--pre); }
+
+  .session-progress { height: 3px; background: var(--surface2); border-radius: 100px; overflow: hidden; margin-top: 9px; }
+  .session-progress-fill {
+    transform-origin: left center;
+    transform: scaleX(0);
+    height: 100%; border-radius: 100px;
+    background: var(--accent);
+    opacity: 0.7;
+    transition: transform 1s linear;  /* GPU-composited — no layout cost */
+    will-change: transform;
+  }
+  .is-closed .session-progress-fill { background: var(--closed); opacity: 0.35; }
+  .is-pre    .session-progress-fill { background: var(--pre); }
+
+  .card-hours {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-top: 7px; font-family: 'JetBrains Mono', monospace;
+    font-size: 9px; letter-spacing: 1px; color: var(--muted);
+    gap: 8px;
+  }
+  .card-hours span { white-space: nowrap; }
+
+
+  /* ── DRAG TO REORDER ── */
+  .market-card { cursor: grab; user-select: none; }
+  .market-card:active { cursor: grabbing; }
+  .market-card.drag-source {
+    opacity: 0.38; box-shadow: none !important; transform: scale(0.97) !important;
+  }
+  .market-card.drag-over {
+    outline: 2px solid var(--accent); outline-offset: 3px;
+  }
+  /* Prevent drag cursor during text selection inside card */
+  .market-card input, .market-card button { cursor: pointer; }
+
+  /* ── CARD HOVER ACTIONS ── */
+  .card-actions {
+    position: absolute; top: 10px; right: 10px;
+    display: flex; gap: 5px; align-items: center;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.15s ease;
+  }
+  .market-card:hover .card-actions,
+  .market-card:focus-within .card-actions,
+  .market-card.kb-actions .card-actions {
+    opacity: 1; pointer-events: auto;
+  }
+  .card-action-btn {
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    border: 1px solid var(--border); background: var(--surface);
+    color: var(--muted); cursor: pointer; font-size: 11px;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-family: 'Inter', sans-serif;
+    line-height: 1;
+    padding: 0;
+    white-space: nowrap;
+    backdrop-filter: blur(8px);
+  }
+  .remove-btn { border-color: rgba(255,68,102,0.25); background: rgba(255,68,102,0.06); color: var(--closed); }
+  .remove-btn:hover { background: rgba(255,68,102,0.18); border-color: rgba(255,68,102,0.45); }
+
+
+  /* ── ADD CARD ── */
+
+  /* ── MODAL ── */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.72);
+    backdrop-filter: blur(10px); z-index: 100;
+    display: none; align-items: center; justify-content: center; padding: 20px;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 22px; padding: 28px;
+    width: 100%; max-width: 440px;
+    animation: modalIn 0.25s cubic-bezier(0.34,1.56,0.64,1);
+    max-height: 90vh; overflow-y: auto;
+  }
+  /* Bottom sheet on small phones */
+  @media (max-width: 480px) {
+    .modal-overlay { align-items: flex-end; padding: 0; }
+    .modal {
+      border-radius: 22px 22px 0 0;
+      max-height: 88vh;
+      padding-bottom: max(28px, calc(16px + env(safe-area-inset-bottom)));
+      animation: modalInSheet 0.3s cubic-bezier(0.34,1.2,0.64,1);
+    }
+    @keyframes modalInSheet {
+      from { transform: translateY(100%); opacity: 0.6; }
+      to   { transform: translateY(0); opacity: 1; }
+    }
+  }
+  @keyframes modalIn {
+    from { transform: scale(0.92) translateY(12px); opacity: 0; }
+    to   { transform: scale(1) translateY(0); opacity: 1; }
+  }
+  .modal-title { font-family: 'Inter', sans-serif; font-weight: 600; font-size: 17px; margin-bottom: 20px; letter-spacing: -0.3px; }
+
+  /* ── MODAL TABS ── */
+  .modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+  .modal-tabs { display: flex; gap: 4px; background: var(--surface2); border-radius: 8px; padding: 3px; }
+  .modal-tab {
+    font-family: 'Inter', sans-serif; font-size: 12px; font-weight: 500;
+    padding: 5px 14px; border-radius: 6px; border: none;
+    background: transparent; color: var(--muted); cursor: pointer; transition: all 0.15s;
+  }
+  .modal-tab.active { background: var(--surface); color: var(--text); font-weight: 600; }
+  .modal-close-btn {
+    width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--border);
+    background: var(--surface2); color: var(--muted); cursor: pointer;
+    font-size: 11px; display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s;
+  }
+  .modal-close-btn:hover { color: var(--closed); border-color: rgba(255,68,102,0.4); }
+
+  /* ── DIRECTORY ── */
+  .modal-search {
+    width: 100%; font-family: 'Inter', sans-serif; font-size: 13px;
+    padding: 9px 14px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--surface2); color: var(--text); outline: none;
+    margin-bottom: 10px; transition: border-color 0.2s;
+  }
+  .modal-search:focus { border-color: var(--accent); }
+  .modal-search::placeholder { color: var(--muted); }
+  .directory-list {
+    max-height: 340px; overflow-y: auto;
+    display: flex; flex-direction: column; gap: 2px;
+    scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+  }
+  .directory-section-label {
+    font-family: 'JetBrains Mono', monospace; font-size: 9px;
+    letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted);
+    padding: 10px 10px 4px; opacity: 0.55;
+  }
+  .directory-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 10px; border-radius: 8px; cursor: pointer;
+    transition: background 0.1s; border: 1px solid transparent;
+  }
+  .directory-item:hover { background: var(--surface2); }
+  .directory-item.already-added { opacity: 0.38; cursor: default; pointer-events: none; }
+  .directory-flag {
+    font-family: 'JetBrains Mono', monospace; font-size: 9px; font-weight: 600;
+    letter-spacing: 1px; color: var(--muted); background: var(--surface2);
+    border: 1px solid var(--border); border-radius: 4px;
+    padding: 2px 5px; min-width: 28px; text-align: center; flex-shrink: 0;
+  }
+  .directory-info { flex: 1; min-width: 0; }
+  .directory-name { font-size: 13px; font-weight: 500; color: var(--text); }
+  .directory-exchange { font-size: 11px; color: var(--muted); margin-top: 1px; }
+  .directory-add {
+    width: 24px; height: 24px; border-radius: 50%; flex-shrink: 0;
+    border: 1px solid var(--border); background: transparent;
+    color: var(--muted); font-size: 16px; line-height: 1;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .directory-add:hover { border-color: var(--accent); color: var(--accent); background: var(--glow); }
+  .directory-add.added { border-color: var(--open); color: var(--open); background: rgba(0,212,151,0.08); font-size: 12px; cursor: default; }
+  .modal-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .modal-field { margin-bottom: 14px; }
+  .modal-label { font-size: 10px; color: var(--muted); letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 6px; font-family: 'JetBrains Mono', monospace; }
+  .modal-input, .modal-select {
+    width: 100%; background: var(--surface2);
+    border: 1px solid var(--border); border-radius: 10px;
+    padding: 11px 14px; color: var(--text);
+    font-family: 'Inter', sans-serif; font-size: 14px; outline: none;
+    transition: border-color 0.2s;
+  }
+  .modal-input:focus, .modal-select:focus { border-color: var(--accent); }
+  .modal-select { appearance: none; cursor: pointer; }
+  .modal-btns { display: flex; gap: 10px; margin-top: 20px; }
+  .btn-primary {
+    flex: 1; padding: 12px; border-radius: 10px; border: none;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    color: #000; font-weight: 600; font-size: 14px;
+    cursor: pointer; font-family: 'Inter', sans-serif; transition: opacity 0.2s;
+  }
+  .btn-primary:hover { opacity: 0.85; }
+  .btn-secondary {
+    flex: 1; padding: 12px; border-radius: 10px;
+    border: 1px solid var(--border); background: transparent;
+    color: var(--muted); font-size: 14px;
+    cursor: pointer; font-family: 'Inter', sans-serif; transition: all 0.2s;
+  }
+  .btn-secondary:hover { color: var(--text); border-color: var(--text); }
+
+  .color-swatches { display: flex; gap: 8px; flex-wrap: wrap; }
+  .color-swatch {
+    width: 22px; height: 22px; border-radius: 50%;
+    cursor: pointer; border: 2px solid transparent;
+    transition: transform 0.15s, border-color 0.15s;
+  }
+  .color-swatch:hover { transform: scale(1.2); }
+  .color-swatch.selected { border-color: white; transform: scale(1.15); }
+  .light .color-swatch.selected { border-color: #333; }
+
+  /* ── FOCUS STATES — keyboard accessibility ── */
+
+  /* Global reset: suppress browser default for all interactive elements;
+     we provide our own via :focus-visible below */
+  *:focus { outline: none; }
+
+  /* Buttons & pill controls */
+  .pill-btn:focus-visible,
+  .icon-btn:focus-visible,
+  .btn-primary:focus-visible,
+  .btn-secondary:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+
+  /* Color swatches — div acting as button */
+  .color-swatch:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+  }
+
+  /* Drag handle */
+
+  /* Text inputs and selects */
+  .modal-input:focus-visible,
+  .modal-select:focus-visible {
+    outline: none; /* border already provides the focus ring */
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(0,229,160,0.15);
+  }
+
+  /* ── MARKETS OPEN INDICATOR ── */
+  .markets-open-indicator {
+    display: flex; align-items: center; gap: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase;
+    color: rgba(232,237,245,0.28);
+    transition: color 0.6s ease, opacity 0.6s ease;
+  }
+  .light .markets-open-indicator {
+    color: rgba(10,22,40,0.28);
+  }
+  .markets-open-indicator.has-open {
+    color: var(--open);
+  }
+  .markets-open-count {
+    font-size: 22px; font-weight: 400; letter-spacing: 1px;
+    color: rgba(232,237,245,0.22); line-height: 1;
+    transition: color 0.6s ease;
+  }
+  .light .markets-open-count {
+    color: rgba(10,22,40,0.22);
+  }
+  .markets-open-indicator.has-open .markets-open-count {
+    color: var(--open);
+  }
+  .markets-open-dot {
+    width: 5px; height: 5px; border-radius: 50%;
+    background: rgba(232,237,245,0.2);
+    transition: background 0.6s ease, box-shadow 0.6s ease;
+    flex-shrink: 0;
+  }
+  .light .markets-open-dot {
+    background: rgba(10,22,40,0.15);
+  }
+  .markets-open-indicator.has-open .markets-open-dot {
+    background: var(--open);
+    box-shadow: 0 0 6px var(--open);
+    animation: livePop 1.2s ease-in-out infinite;
+  }
+
+  /* ── SEARCH EMPTY STATE ── */
+  .search-empty {
+    grid-column: 1 / -1;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 6px; padding: 56px 24px; text-align: center;
+  }
+  .search-empty-icon { font-size: 26px; color: var(--muted); opacity: 0.25; margin-bottom: 4px; }
+  .search-empty-label { font-size: 14px; font-weight: 500; color: var(--text); opacity: 0.55; letter-spacing: -0.2px; }
+  .search-empty-query {
+    font-family: 'JetBrains Mono', monospace; font-size: 12px;
+    color: var(--muted); letter-spacing: 0.5px;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 6px; padding: 3px 10px; margin-top: 2px;
+  }
+  .search-empty-hint { font-size: 11px; color: var(--muted); opacity: 0.5; margin-top: 6px; }
+
+  /* ── SAVE TOAST ── */
+  .save-toast {
+    position: fixed; bottom: 28px; left: 50%;
+    transform: translateX(-50%) translateY(70px);
+    background: var(--surface); border: 1px solid rgba(0,229,160,0.4);
+    border-radius: 100px; padding: 10px 22px;
+    font-size: 12px; font-weight: 500; color: var(--accent);
+    font-family: 'JetBrains Mono', monospace; letter-spacing: 1.5px;
+    z-index: 200;
+    transition: transform 0.4s cubic-bezier(0.34,1.56,0.64,1), opacity 0.3s;
+    opacity: 0; pointer-events: none;
+    display: flex; align-items: center; gap: 8px;
+    box-shadow: 0 8px 28px rgba(0,0,0,0.4); white-space: nowrap;
+  }
+  .save-toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+
+  /* COMPACT / LIST overrides */
+  .layout-compact .market-card { padding: 14px 16px; border-radius: 14px; }
+  .layout-compact .market-flag { font-size: 9px; padding: 2px 6px; }
+  .layout-compact .market-name { font-size: 14px; letter-spacing: -0.1px; }
+  .layout-compact .card-local-time { font-size: 20px; letter-spacing: 1px; }
+  .layout-compact .card-countdown { padding: 9px 11px; margin: 10px 0 0; }
+  .layout-compact .countdown-timer { font-size: 16px; letter-spacing: 1px; }
+  .layout-compact .countdown-label { font-size: 9px; }
+  .layout-compact .card-hours { font-size: 9px; }
+  .layout-list .market-card { display: flex; align-items: center; gap: 20px; padding: 16px 22px 16px 26px; border-radius: 14px; }
+  .layout-list .card-top { flex: 1; margin-bottom: 0; display: flex; align-items: center; gap: 14px; }
+  .layout-list .card-countdown { flex: 1; margin: 0; min-width: 180px; }
+  .layout-list .card-hours { margin-top: 0; }
+  .layout-list .card-local-time { font-size: 22px; letter-spacing: 1px; }
+  .layout-list .live-banner { margin-bottom: 0; }
+  .layout-list .session-progress { display: none; }
+
+  /* ── RESPONSIVE SYSTEM ──────────────────────────────────────────
+     Breakpoints:
+       xs  : < 480px   — small phones (iPhone SE, older Androids)
+       sm  : < 640px   — phones
+       md  : < 900px   — tablets / landscape phones
+       lg  : < 1100px  — small laptops
+       xl  : 1200px+   — handled by max-width on .container
+  ─────────────────────────────────────────────────────────────── */
+
+  /* ── LARGE DESKTOP (1100–1200px) ── */
+  @media (max-width: 1200px) {
+    .container { padding: 10px 16px 40px; }
+  }
+
+  /* ── SMALL LAPTOP / LARGE TABLET (900–1100px) ── */
+  @media (max-width: 1100px) {
+    .layout-grid    { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+    .layout-compact { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+  }
+
+  /* ── TABLET (640–900px) ── */
+  @media (max-width: 900px) {
+    .container { padding: 10px 14px 36px; }
+
+    /* Header: tighten gaps */
+    header { gap: 10px; margin-bottom: 18px; padding-bottom: 16px; }
+
+    /* Controls row: allow wrap but keep tidy */
+    .controls { gap: 6px; }
+
+    /* Grids: force 2 columns on tablet */
+    .layout-grid    { grid-template-columns: repeat(2, 1fr); }
+    .layout-compact { grid-template-columns: repeat(3, 1fr); }
+
+    /* UTC strip: two-row layout on tablet */
+    .utc-strip { padding: 14px 18px; gap: 10px; }
+    .utc-time  { font-size: 22px; }
+
+    /* Session bar: tighter */
+    .session-bar-wrap { padding: 14px 16px; margin-bottom: 18px; }
+
+    /* Card local time: slightly smaller */
+    .card-local-time { font-size: 24px; }
+  }
+
+  /* ── PHONE (≤640px) ── */
+  @media (max-width: 640px) {
+    .container { padding: 8px 12px 32px; }
+
+    /* ── Header ── */
+    header {
+      gap: 8px;
+      margin-bottom: 14px;
+      padding-bottom: 14px;
+      /* Stack logo above controls on small phones */
+      flex-wrap: wrap;
+    }
+    .logo-mark  { font-size: 18px; }
+    .logo-sub   { font-size: 10px; }
+
+    /* Controls: let them wrap naturally */
+    .controls { gap: 5px; }
+
+    /* Search: slightly narrower default, still expands on focus */
+    .search-input { width: 110px; }
+    .search-input:focus { width: 150px; }
+
+    /* Hide layout toggle labels — keep only icons */
+    #btn-grid { min-width: 34px; padding: 7px 10px; }
+    #btn-list { min-width: 34px; padding: 7px 10px; }
+
+    /* Local time display: compact it */
+    .local-time-display { padding-left: 10px; margin-left: 2px; }
+    #local-clock { font-size: 13px !important; }
+
+    /* ── UTC strip ── */
+    .utc-strip {
+      padding: 12px 14px;
+      gap: 8px;
+      flex-wrap: wrap;
+      /* Stack: UTC time left, market count right, date below */
+    }
+    .utc-time  { font-size: 20px; letter-spacing: 1px; }
+    .utc-date  { font-size: 11px; width: 100%; text-align: left; }
+
+    /* ── Session timeline ── */
+    .session-bar-wrap  { padding: 12px 14px; margin-bottom: 14px; }
+    .timeline          { height: 38px; }
+    /* Hide some hour labels to prevent crowding — keep every other */
+    .timeline-hours span:nth-child(even) { visibility: hidden; }
+    .timeline-hours { margin-top: 4px; }
+    .timeline-segment { font-size: 8px; letter-spacing: 0.5px; }
+
+    /* ── Grid layouts ── */
+    .layout-grid    { grid-template-columns: 1fr; gap: 10px; }
+    .layout-compact { grid-template-columns: 1fr 1fr; gap: 8px; }
+    .markets-grid   { gap: 10px; }
+
+    /* ── Cards: grid layout ── */
+    .market-card { padding: 14px 16px; border-radius: 16px; }
+    .card-local-time { font-size: 24px; }
+    .countdown-timer { font-size: 17px; }
+    .market-name { font-size: 15px; }
+
+    /* Compact card overrides */
+    .layout-compact .market-card   { padding: 12px 13px; border-radius: 13px; }
+    .layout-compact .card-local-time { font-size: 18px; letter-spacing: 0.5px; }
+    .layout-compact .countdown-timer { font-size: 14px; }
+    .layout-compact .market-name   { font-size: 13px; }
+    .layout-compact .card-countdown { padding: 7px 9px; }
+
+    /* ── List layout on mobile ── */
+    .layout-list .markets-grid,
+    .markets-grid.layout-list { gap: 10px; }
+
+    .layout-list .market-card {
+      flex-direction: column;
+      align-items: flex-start;
+      padding: 16px 18px;
+      gap: 10px;
+    }
+    .layout-list .card-top {
+      width: 100%;
+      margin-bottom: 0;
+      gap: 10px;
+    }
+    .layout-list .card-local-time { font-size: 22px; letter-spacing: 1px; }
+    .layout-list .card-tz         { display: none; }
+    .layout-list .market-exchange  { display: none; }
+    .layout-list .card-countdown  { text-align: left; width: 100%; margin: 0; padding: 10px 12px; }
+    .layout-list .card-hours      { width: 100%; margin-top: 4px; }
+    .layout-list .session-progress { display: block; width: 100%; margin-top: 10px; }
+    .layout-list .live-banner     { margin-bottom: 4px; }
+
+    /* ── Touch: always show card actions (no hover on mobile) ── */
+    .card-actions { opacity: 1; pointer-events: auto; }
+
+    /* ── Modal ── */
+    .modal { padding: 20px 18px; border-radius: 18px; }
+    .modal-row { grid-template-columns: 1fr; gap: 0; }
+    .directory-list { max-height: 55vh; }
+
+    /* ── Toast: full-width on mobile ── */
+    .save-toast {
+      width: calc(100% - 32px);
+      text-align: center;
+      justify-content: center;
+      bottom: 16px;
+    }
+  }
+
+  /* ── SMALL PHONE (≤480px) ── */
+  @media (max-width: 480px) {
+    /* Header: stack logo + controls vertically for very small screens */
+    header { flex-direction: column; align-items: flex-start; gap: 10px; }
+    .controls { width: 100%; justify-content: flex-start; }
+
+    /* Search takes more space */
+    .search-input       { width: 120px; }
+    .search-input:focus { width: 160px; }
+
+    /* Compact grid: single column on tiny phones */
+    .layout-compact { grid-template-columns: 1fr; }
+
+    /* UTC strip: fully stacked */
+    .utc-strip {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 8px;
+    }
+    .local-time-display {
+      border-left: none;
+      border-top: 1px solid var(--border);
+      padding-left: 0;
+      padding-top: 8px;
+      margin-left: 0;
+      align-items: flex-start;
+      width: 100%;
+    }
+    .light .local-time-display { border-color: rgba(0,0,0,0.09); }
+
+    /* Timeline hours: show even fewer labels */
+    .timeline-hours span { font-size: 8px; }
+    .timeline-hours span:nth-child(n) { visibility: hidden; }
+    .timeline-hours span:first-child,
+    .timeline-hours span:nth-child(4),
+    .timeline-hours span:nth-child(7),
+    .timeline-hours span:last-child { visibility: visible; }
+
+    /* Card time: safe minimum */
+    .card-local-time { font-size: 22px; }
+    .market-name     { font-size: 14px; }
+    .status-badge    { font-size: 8px; padding: 3px 8px; }
+  }
+
+  /* ── LANDSCAPE PHONE (short height) ── */
+  @media (max-height: 500px) and (orientation: landscape) {
+    .container   { padding: 6px 14px 20px; }
+    header       { margin-bottom: 10px; padding-bottom: 10px; }
+    .utc-strip   { padding: 10px 14px; margin-bottom: 12px; }
+    .session-bar-wrap { display: none; } /* hide timeline in landscape — saves critical space */
+    .markets-grid { gap: 8px; }
+    .layout-grid  { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
+    .market-card  { padding: 12px 14px; }
+    .card-local-time { font-size: 20px; }
+  }
+
+  /* ── VERY WIDE SCREENS (1400px+) ── */
+  @media (min-width: 1400px) {
+    .container { max-width: 1380px; }
+    .layout-grid    { grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); }
+    .layout-compact { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+  }
+
+  /* ── TOUCH DEVICE OPTIMIZATIONS ── */
+  @media (hover: none) {
+    /* No hover lift on touch — prevents sticky transformed state */
+    .market-card:hover { transform: none; box-shadow: inherit; }
+    .market-card.is-open { transform: none; } /* open cards still float via their own rule but not hover */
+    /* Always show card actions — touch has no hover */
+    .card-actions { opacity: 1; pointer-events: auto; }
+    /* Larger tap targets for buttons */
+    .icon-btn  { width: 38px; height: 38px; }
+    .pill-btn  { padding: 9px 14px; }
+    .search-add-btn { width: 30px; height: 30px; }
+    .directory-add  { width: 30px; height: 30px; font-size: 18px; }
+  }
+  /* Smooth scroll for iOS momentum */
+  .directory-list, .modal { -webkit-overflow-scrolling: touch; overflow-y: auto; }
+  /* Prevent double-tap zoom on buttons */
+  button, .pill-btn, .icon-btn, .market-card { touch-action: manipulation; }
+  /* Hide text labels on layout buttons at small sizes, keep icon */
+  @media (max-width: 640px) {
+    .btn-label { display: none; }
+    #btn-grid, #btn-list { padding: 7px 10px; }
+  }
+
+  /* Screen-reader-only utility: visually hidden but announced by AT */
+  .sr-only {
+    position: absolute; width: 1px; height: 1px;
+    padding: 0; margin: -1px; overflow: hidden;
+    clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+  }
+
+  /* Skip-to-content link: hidden until focused via keyboard */
+  .skip-link {
+    position: fixed; top: -999px; left: 12px; z-index: 9999;
+    background: var(--accent); color: #000; font-weight: 700;
+    font-family: 'Inter', sans-serif; font-size: 13px;
+    padding: 8px 16px; border-radius: 8px; text-decoration: none;
+    transition: top 0.1s;
+  }
+  .skip-link:focus { top: 12px; }
+
+  /* Card focus ring — cards are keyboard-navigable */
+  .market-card:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  /* Stronger focus ring for modal close button */
+  .modal-close-btn:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 2px;
+  }
+
+  /* Directory items */
+  .directory-item:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: -2px;
+    border-radius: 8px;
+  }
+  .directory-add:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 2px;
+  }
+
+  /* Card action button */
+  .card-action-btn:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 2px;
+  }
+
+  /* ── REDUCED MOTION ──────────────────────────────────────────── */
+  @media (prefers-reduced-motion: reduce) {
+    /* Kill all transitions */
+    *, *::before, *::after {
+      transition-duration: 0.01ms !important;
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+    }
+
+    /* Specifically silence the most distracting animations */
+    .orb { display: none; }
+    .live-dot { animation: none !important; }
+    .markets-open-dot { animation: none !important; }
+    .market-card.is-open { animation: none !important; }
+    .market-card.is-open::after { display: none !important; }
+    .session-progress-fill {
+    transform-origin: left center;
+    transform: scaleX(0);  /* updated via JS */ transition: none !important; }
+    .now-line { transition: none !important; }
+    .search-input { transition: none !important; }
+    .market-card { transition: none !important; transform: none !important; }
+    .market-card:hover { transform: none !important; }
+    .card-actions { transition: none !important; opacity: 1; }
+    .search-dropdown { transition: none !important; }
+    .card-highlight { animation: none !important; }
+    .card-actions { opacity: 1 !important; transition: none !important; }
+  }
+
+  /* ── AMBIENT DIM ─────────────────────────────────────────────── */
+  /* Applied by JS when ambient light sensor detects a dark room.   */
+  /* Smooth 2s ease so the transition is imperceptible, not jarring.*/
+  body {
+    transition: filter 2s ease, background-color 1.5s ease;
+  }
+  body.ambient-dim-1 { filter: brightness(0.82); }  /* dim room  ~50 lux  */
+  body.ambient-dim-2 { filter: brightness(0.62); }  /* dark room ~10 lux  */
+  body.ambient-dim-3 { filter: brightness(0.42); }  /* very dark ~2 lux   */
+
+  /* Respect reduced-motion: skip the transition, keep the dim level */
+  @media (prefers-reduced-motion: reduce) {
+    body { transition: none !important; }
+  }
+
+</style>
+  <!-- PWA -->
+  <link rel="manifest" href="data:application/manifest+json,{
+    %22name%22:%22TradeHours%22,
+    %22short_name%22:%22TradeHours%22,
+    %22start_url%22:%22.%22,
+    %22display%22:%22standalone%22,
+    %22background_color%22:%22%230f1318%22,
+    %22theme_color%22:%22%230f1318%22,
+    %22description%22:%22Live global market hours and trading sessions%22,
+    %22icons%22:[{%22src%22:%22data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='112' fill='%230f1318'/%3E%3Ctext y='360' x='50' font-size='380' font-family='serif'%3E📈%3C/text%3E%3C/svg%3E%22,%22sizes%22:%22512x512%22,%22type%22:%22image/svg+xml%22}]
+  }" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="TradeHours" />
+  <meta name="theme-color" content="#0f1318" />
+</head>
+<body>
+<a href="#main-content" class="skip-link">Skip to content</a>
+
+<div class="orb" id="orb" aria-hidden="true"></div>
+<div id="sr-live" aria-live="polite" aria-atomic="true" class="sr-only"></div>
+<div class="save-toast" id="save-toast" role="status" aria-live="polite" aria-atomic="true">✓ Layout saved</div>
+
+<div class="container">
+  <header role="banner">
+    <div>
+      <div class="logo-mark">TradeHours</div>
+      <div class="logo-sub">Global Market Hours</div>
+    </div>
+    <nav class="controls" aria-label="View controls">
+      <button class="pill-btn active" onclick="setLayout('grid')" id="btn-grid" aria-pressed="true" aria-label="Grid layout"><span class="btn-icon">⊞</span><span class="btn-label"> Grid</span></button>
+      <button class="pill-btn" onclick="setLayout('list')" id="btn-list" aria-pressed="false" aria-label="List layout"><span class="btn-icon">≡</span><span class="btn-label"> List</span></button>
+      <button class="icon-btn" onclick="openModal()" aria-label="Add market" aria-haspopup="dialog">＋</button>
+      <button class="icon-btn" id="theme-btn" onclick="toggleTheme()" aria-label="Switch to light mode" aria-pressed="false">◐</button>
+      <button class="icon-btn" id="ambient-btn" onclick="cycleAmbientDim()" aria-label="Screen brightness: auto — click to override" title="Ambient dim">○</button>
+    </nav>
+  </header>
+
+  <div class="utc-strip" role="region" aria-label="UTC clock and market status">
+    <div>
+      <div class="utc-label" aria-hidden="true">Universal Time · UTC</div>
+      <div class="utc-time" id="utc-clock" aria-label="UTC time" aria-live="off">--:--:--</div>
+    </div>
+    <div class="markets-open-indicator" id="open-indicator" aria-live="polite" aria-atomic="true" aria-label="Market status">
+      <div class="markets-open-dot" aria-hidden="true"></div>
+      <div>
+        <div class="markets-open-count" id="open-count" aria-hidden="true">0</div>
+        <div id="open-label" aria-hidden="true">markets open</div>
+      </div>
+    </div>
+    <div class="utc-date" id="utc-date" aria-label="UTC date">--</div>
+    <div class="local-time-display" id="local-time-wrap">
+      <div class="utc-label" aria-hidden="true" id="local-tz-label">Local</div>
+      <div class="utc-time" id="local-clock" aria-label="Local time" style="font-size:16px">--:--:--</div>
+    </div>
+  </div>
+
+  <div class="session-bar-wrap" role="region" aria-label="24-hour trading session overview">
+    <div class="session-bar-title" aria-hidden="true">24H Session Overview · UTC</div>
+    <div class="timeline" id="timeline" role="img" aria-label="24-hour trading session overview in UTC">
+      <div class="now-line" id="now-line"></div>
+    </div>
+    <div class="timeline-hours" aria-hidden="true">
+      <span>00</span><span>03</span><span>06</span><span>09</span>
+      <span>12</span><span>15</span><span>18</span><span>21</span><span>24</span>
+    </div>
+  </div>
+
+  <main id="main-content" aria-label="Market cards">
+    <div class="markets-grid layout-grid" id="markets-grid" role="list"></div>
+  </main>
+</div>
+
+<!-- MODAL -->
+<div class="modal-overlay" id="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" aria-hidden="true">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="modal-title">Add Market</div>
+      <button class="modal-close-btn" onclick="closeModal()" aria-label="Close dialog">✕</button>
+    </div>
+    <input class="modal-search" id="modal-search" type="text" placeholder="Search markets…" oninput="filterDirectory(this.value)" autocomplete="off" />
+    <div class="directory-list" id="directory-list"></div>
+  </div>
+</div>
+
+<script>
+// ─── VERSION ──────────────────────────────────────────────────────
+const APP_VERSION = '2.0.0';
+const APP_BUILD   = new Date().toISOString().slice(0,10);
+// Exposed on window for debugging: window.TH.version etc.
+window.TH = { version: APP_VERSION, build: APP_BUILD, markets: () => allMarkets, cache: () => _tickCache };
+
+// ─── DATA ─────────────────────────────────────────────────────────
+const DEFAULT_MARKETS = [
+  { id:'tokyo',     name:'Tokyo',     flag:'JP', region:'asia',          exchange:'TSE / JPX',     tz:'Asia/Tokyo',        open:{h:9,m:0},  close:{h:15,m:30}, color:'#ff6b6b' },
+  { id:'sydney',    name:'Sydney',    flag:'AU', region:'asia pacific',  exchange:'ASX',           tz:'Australia/Sydney',  open:{h:10,m:0}, close:{h:16,m:0},  color:'#ff9f43' },
+  { id:'singapore', name:'Singapore', flag:'SG', region:'asia',          exchange:'SGX',           tz:'Asia/Singapore',   open:{h:9,m:0},  close:{h:17,m:0},  color:'#ffd32a' },
+  { id:'hongkong',  name:'Hong Kong', flag:'HK', region:'asia',          exchange:'HKEX',          tz:'Asia/Hong_Kong',   open:{h:9,m:30}, close:{h:16,m:0},  color:'#ff4757' },
+  { id:'frankfurt', name:'Frankfurt', flag:'DE', region:'europe',        exchange:'FSE / DAX',     tz:'Europe/Berlin',    open:{h:9,m:0},  close:{h:17,m:30}, color:'#7c6dfa' },
+  { id:'london',    name:'London',    flag:'GB', region:'europe',        exchange:'LSE / FTSE',    tz:'Europe/London',    open:{h:8,m:0},  close:{h:16,m:30}, color:'#00e5a0' },
+  { id:'newyork',   name:'New York',  flag:'US', region:'americas',      exchange:'NYSE / NASDAQ', tz:'America/New_York', open:{h:9,m:30}, close:{h:16,m:0},  color:'#0099ff' },
+];
+const SWATCHES = ['#00e5a0','#0099ff','#ff6b6b','#ff9f43','#ffd32a','#ff4757','#7c6dfa','#e84393','#26de81','#fd9644','#a29bfe','#74b9ff'];
+
+// ─── MARKET DIRECTORY ─────────────────────────────────────────────
+// Curated list of global markets users can one-click add
+const MARKET_DIRECTORY = [
+  // Asia Pacific
+  { id:'tokyo',     name:'Tokyo',      flag:'JP', region:'Asia Pacific', exchange:'TSE / JPX',      tz:'Asia/Tokyo',         open:{h:9,m:0},  close:{h:15,m:30}, color:'#ff6b6b' },
+  { id:'sydney',    name:'Sydney',     flag:'AU', region:'Asia Pacific', exchange:'ASX',             tz:'Australia/Sydney',   open:{h:10,m:0}, close:{h:16,m:0},  color:'#ff9f43' },
+  { id:'singapore', name:'Singapore',  flag:'SG', region:'Asia Pacific', exchange:'SGX',             tz:'Asia/Singapore',    open:{h:9,m:0},  close:{h:17,m:0},  color:'#ffd32a' },
+  { id:'hongkong',  name:'Hong Kong',  flag:'HK', region:'Asia Pacific', exchange:'HKEX',            tz:'Asia/Hong_Kong',    open:{h:9,m:30}, close:{h:16,m:0},  color:'#ff4757' },
+  { id:'shanghai',  name:'Shanghai',   flag:'CN', region:'Asia Pacific', exchange:'SSE / SZSE',      tz:'Asia/Shanghai',     open:{h:9,m:30}, close:{h:15,m:0},  color:'#fd9644' },
+  { id:'seoul',     name:'Seoul',      flag:'KR', region:'Asia Pacific', exchange:'KRX',             tz:'Asia/Seoul',        open:{h:9,m:0},  close:{h:15,m:30}, color:'#a29bfe' },
+  { id:'mumbai',    name:'Mumbai',     flag:'IN', region:'Asia Pacific', exchange:'BSE / NSE',       tz:'Asia/Kolkata',      open:{h:9,m:15}, close:{h:15,m:30}, color:'#e84393' },
+  { id:'taipei',    name:'Taipei',     flag:'TW', region:'Asia Pacific', exchange:'TWSE',            tz:'Asia/Taipei',       open:{h:9,m:0},  close:{h:13,m:30}, color:'#26de81' },
+  // Europe
+  { id:'london',    name:'London',     flag:'GB', region:'Europe',       exchange:'LSE / FTSE',      tz:'Europe/London',     open:{h:8,m:0},  close:{h:16,m:30}, color:'#00e5a0' },
+  { id:'frankfurt', name:'Frankfurt',  flag:'DE', region:'Europe',       exchange:'FSE / DAX',       tz:'Europe/Berlin',     open:{h:9,m:0},  close:{h:17,m:30}, color:'#7c6dfa' },
+  { id:'paris',     name:'Paris',      flag:'FR', region:'Europe',       exchange:'Euronext / CAC',  tz:'Europe/Paris',      open:{h:9,m:0},  close:{h:17,m:30}, color:'#74b9ff' },
+  { id:'zurich',    name:'Zurich',     flag:'CH', region:'Europe',       exchange:'SIX Swiss',       tz:'Europe/Zurich',     open:{h:9,m:0},  close:{h:17,m:30}, color:'#a29bfe' },
+  { id:'amsterdam', name:'Amsterdam',  flag:'NL', region:'Europe',       exchange:'Euronext AMS',    tz:'Europe/Paris',      open:{h:9,m:0},  close:{h:17,m:30}, color:'#ff9f43' },
+  { id:'moscow',    name:'Moscow',     flag:'RU', region:'Europe',       exchange:'MOEX',            tz:'Europe/Moscow',     open:{h:10,m:0}, close:{h:18,m:50}, color:'#ff6b6b' },
+  { id:'stockholm', name:'Stockholm',  flag:'SE', region:'Europe',       exchange:'Nasdaq OMX',      tz:'Europe/Paris',      open:{h:9,m:0},  close:{h:17,m:30}, color:'#26de81' },
+  // Americas
+  { id:'newyork',   name:'New York',   flag:'US', region:'Americas',     exchange:'NYSE / NASDAQ',   tz:'America/New_York',  open:{h:9,m:30}, close:{h:16,m:0},  color:'#0099ff' },
+  { id:'chicago',   name:'Chicago',    flag:'US', region:'Americas',     exchange:'CME / CBOE',      tz:'America/Chicago',   open:{h:8,m:30}, close:{h:15,m:15}, color:'#74b9ff' },
+  { id:'toronto',   name:'Toronto',    flag:'CA', region:'Americas',     exchange:'TSX',             tz:'America/New_York',  open:{h:9,m:30}, close:{h:16,m:0},  color:'#fd9644' },
+  { id:'saopaulo',  name:'São Paulo',  flag:'BR', region:'Americas',     exchange:'B3 / Bovespa',    tz:'America/Sao_Paulo', open:{h:10,m:0}, close:{h:17,m:0},  color:'#26de81' },
+  { id:'mexico',    name:'Mexico City',flag:'MX', region:'Americas',     exchange:'BMV',             tz:'America/Chicago',   open:{h:8,m:30}, close:{h:15,m:0},  color:'#e84393' },
+  // Middle East & Africa
+  { id:'dubai',     name:'Dubai',      flag:'AE', region:'Middle East',  exchange:'DFM / DFSA',      tz:'Asia/Dubai',        open:{h:10,m:0}, close:{h:14,m:0},  color:'#ffd32a' },
+  { id:'riyadh',    name:'Riyadh',     flag:'SA', region:'Middle East',  exchange:'Tadawul',         tz:'Asia/Riyadh',       open:{h:10,m:0}, close:{h:15,m:0},  color:'#ff9f43' },
+  { id:'telaviv',   name:'Tel Aviv',   flag:'IL', region:'Middle East',  exchange:'TASE',            tz:'Asia/Jerusalem',    open:{h:9,m:59}, close:{h:17,m:25}, color:'#74b9ff' },
+  { id:'johannesburg',name:'Johannesburg',flag:'ZA',region:'Africa',    exchange:'JSE',             tz:'Africa/Johannesburg',open:{h:9,m:0},  close:{h:17,m:0},  color:'#a29bfe' },
+  { id:'cairo',     name:'Cairo',      flag:'EG', region:'Africa',       exchange:'EGX',             tz:'Africa/Cairo',      open:{h:10,m:0}, close:{h:14,m:30}, color:'#ff6b6b' },
+];
+
+function renderDirectory(query) {
+  const list = document.getElementById('directory-list');
+  if (!list) return;
+  const q = query.toLowerCase().trim();
+  const addedIds = new Set(allMarkets.map(m => m.id));
+
+  let filtered = MARKET_DIRECTORY.filter(m =>
+    !q ||
+    m.name.toLowerCase().includes(q) ||
+    m.flag.toLowerCase().includes(q) ||
+    m.exchange.toLowerCase().includes(q) ||
+    m.region.toLowerCase().includes(q)
+  );
+
+  if (!filtered.length) {
+    list.innerHTML = `<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px">No markets found</div>`;
+    return;
+  }
+
+  let html = '';
+  if (!q) {
+    // Group by region
+    const regions = [...new Set(MARKET_DIRECTORY.map(m => m.region))];
+    regions.forEach(region => {
+      const items = filtered.filter(m => m.region === region);
+      if (!items.length) return;
+      html += `<div class="directory-section-label">${region}</div>`;
+      items.forEach(m => { html += directoryItem(m, addedIds.has(m.id)); });
+    });
+  } else {
+    filtered.forEach(m => { html += directoryItem(m, addedIds.has(m.id)); });
+  }
+
+  list.innerHTML = html;
+}
+
+function directoryItem(m, added) {
+  return `<div class="directory-item${added ? ' already-added' : ''}">
+    <span class="directory-flag" aria-label="${flagName(m.flag)}">${m.flag}</span>
+    <div class="directory-info">
+      <div class="directory-name">${m.name}</div>
+      <div class="directory-exchange">${m.exchange}</div>
+    </div>
+    <button class="directory-add${added ? ' added' : ''}" onclick="addFromDirectory('${m.id}')" ${added ? 'disabled' : ''} title="${added ? 'Already added' : 'Add ' + m.name}">
+      ${added ? '✓' : '＋'}
+    </button>
+  </div>`;
+}
+
+function addFromDirectory(id) {
+  if (visibleCount() >= MAX_MARKETS) {
+    showToast(`Max ${MAX_MARKETS} markets — remove one to add another`);
+    return;
+  }
+  const m = MARKET_DIRECTORY.find(x => x.id === id);
+  if (!m || allMarkets.find(x => x.id === id)) return;
+  allMarkets.push({ ...m, region: m.region.toLowerCase() });
+  renderAll();
+  saveState();
+  renderDirectory(document.getElementById('modal-search')?.value || '');
+  const remaining = MAX_MARKETS - visibleCount();
+  showToast(`${m.flag} ${m.name} added${remaining > 0 ? ` · ${remaining} slot${remaining === 1 ? '' : 's'} left` : ' · market limit reached'}`);
+}
+
+function filterDirectory(value) {
+  renderDirectory(value);
+}
+
+// ─── STATE ────────────────────────────────────────────────────────
+let allMarkets   = [];
+let selColor     = SWATCHES[1];
+let currentLayout = 'grid';
+
+
+// ─── PERSISTENCE ──────────────────────────────────────────────────
+// Debounced save: coalesces rapid state changes into a single write.
+// e.g. removing a market triggers renderAll which calls saveState;
+// the debounce ensures localStorage is written at most once per 300ms.
+let _saveTimer = null;
+function saveState() {
+  clearTimeout(_saveTimer);
+  _saveTimer = setTimeout(_writeState, 300);
+}
+function _writeState() {
+  try {
+    localStorage.setItem('mcp_order',  JSON.stringify(allMarkets.map(m => m.id)));
+    localStorage.setItem('mcp_custom', JSON.stringify(allMarkets.filter(m => m.custom)));
+    localStorage.setItem('mcp_layout', currentLayout);
+    localStorage.setItem('mcp_theme',  document.body.classList.contains('light') ? 'light' : 'dark');
+  } catch(e) {
+    // localStorage may be unavailable in private browsing or over-quota
+    console.warn('TradeHours: could not persist state', e);
+  }
+}
+
+function loadState() {
+  try {
+    const theme = localStorage.getItem('mcp_theme');
+    if (theme === 'light') {
+      document.body.classList.add('light');
+      document.getElementById('theme-btn').textContent = '◑';
+    }
+    const layout = localStorage.getItem('mcp_layout');
+    if (layout && layout !== 'compact') currentLayout = layout;
+    else currentLayout = 'grid';
+
+    const savedCustom  = JSON.parse(localStorage.getItem('mcp_custom')  || '[]');
+    const savedOrder   = JSON.parse(localStorage.getItem('mcp_order')   || 'null');
+
+    // Sanitise custom markets: strip emoji flags, capitalise names
+    const cleanCustom = savedCustom.map(m => ({
+      ...m,
+      flag: (m.flag || '??').replace(/[^\x00-\x7F]/g, '').toUpperCase().slice(0, 4) || '??',
+      name: m.name ? m.name.charAt(0).toUpperCase() + m.name.slice(1) : m.name,
+    }));
+
+    const allBase = [...DEFAULT_MARKETS.map(m => ({...m})), ...cleanCustom];
+    if (savedOrder) {
+      // restore order, add any new defaults at end
+      allMarkets = savedOrder.map(id => allBase.find(m => m.id === id)).filter(Boolean);
+      allBase.forEach(m => { if (!allMarkets.find(x => x.id === m.id)) allMarkets.push(m); });
+    } else {
+      allMarkets = allBase;
+    }
+  } catch(e) {
+    allMarkets = DEFAULT_MARKETS.map(m => ({...m}));
+  }
+}
+
+// ─── HELPERS ──────────────────────────────────────────────────────
+function pad(n) { return String(n).padStart(2,'0'); }
+
+
+
+// ─── ACCESSIBILITY HELPERS ────────────────────────────────────────
+
+function announceToSR(msg) {
+  const el = document.getElementById('sr-live');
+  if (!el) return;
+  el.textContent = '';
+  requestAnimationFrame(() => { el.textContent = msg; });
+}
+
+const FLAG_NAMES = {
+  JP:'Japan', AU:'Australia', SG:'Singapore', HK:'Hong Kong', CN:'China',
+  KR:'South Korea', IN:'India', TW:'Taiwan', GB:'United Kingdom', DE:'Germany',
+  FR:'France', CH:'Switzerland', NL:'Netherlands', RU:'Russia', SE:'Sweden',
+  US:'United States', CA:'Canada', BR:'Brazil', MX:'Mexico', AE:'UAE',
+  SA:'Saudi Arabia', IL:'Israel', ZA:'South Africa', EG:'Egypt', '??':'Unknown'
+};
+function flagName(code) { return FLAG_NAMES[code] || code; }
+
+// Focus trap: cycle Tab within a container
+function trapFocus(container) {
+  const focusable = container.querySelectorAll(
+    'button:not([disabled]), [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+  );
+  const first = focusable[0], last = focusable[focusable.length - 1];
+  function handler(e) {
+    if (e.key !== 'Tab') return;
+    if (e.shiftKey) { if (document.activeElement === first) { e.preventDefault(); last.focus(); } }
+    else            { if (document.activeElement === last)  { e.preventDefault(); first.focus(); } }
+  }
+  container.addEventListener('keydown', handler);
+  return () => container.removeEventListener('keydown', handler); // returns cleanup fn
+}
+let _trapCleanup = null;
+
+
+// ─── INTL FORMATTER CACHE ─────────────────────────────────────────
+// Creating Intl objects is expensive. Cache one per timezone.
+// These are reused across all getMarketTimes() calls every tick.
+const _fmtTime  = {};  // tz → hour/min/sec formatter
+const _fmtDate  = {};  // tz → date formatter (for holiday lookup)
+const _fmtTZ    = {};  // tz → timezone name formatter
+
+function fmtTime(tz) {
+  return _fmtTime[tz] || (_fmtTime[tz] = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz, hour12: false,
+    hour: '2-digit', minute: '2-digit', second: '2-digit'
+  }));
+}
+function fmtDate(tz) {
+  return _fmtDate[tz] || (_fmtDate[tz] = new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit'
+  }));
+}
+function fmtTZName(tz) {
+  return _fmtTZ[tz] || (_fmtTZ[tz] = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz, timeZoneName: 'short'
+  }));
+}
+
+// ─── PER-TICK CACHE ───────────────────────────────────────────────
+// Populated once per update() call. All reads within a tick hit this map.
+// Eliminates redundant getMarketTimes() calls from getSortedMarkets,
+// renderAll, openCount checks, etc.
+let _tickCache = new Map();   // id → times result
+let _tickNow   = null;        // current Date, shared across the tick
+
+function getMarketTimesNow(market) {
+  if (_tickCache.has(market.id)) return _tickCache.get(market.id);
+  const t = _computeMarketTimes(market, _tickNow || new Date());
+  _tickCache.set(market.id, t);
+  return t;
+}
+
+function beginTick() {
+  _tickNow = new Date();
+  _tickCache = new Map();   // clear previous tick's data
+}
+
+// ─── HOLIDAY CALENDAR ─────────────────────────────────────────────
+// Lightweight override system. Each entry targets a specific market
+// on a specific date (YYYY-MM-DD in the market's LOCAL timezone).
+//
+// Schema:
+//   market : market id (matches allMarkets[].id)  OR '*' for all markets
+//   date   : 'YYYY-MM-DD' in the market's local timezone
+//   type   : 'holiday'  → market is fully closed all day
+//              'half'   → early close; supply a close override
+//              'closed' → unexpected closure with optional note
+//   close  : { h, m }  — overrides market.close for half-days (ignored for 'holiday')
+//   note   : human-readable label shown on the card badge
+//
+// API integration point:
+//   Replace `STATIC_HOLIDAYS` with a fetch from your data source and
+//   call `mergeHolidays(remoteData)` on load. The lookup logic below
+//   is API-agnostic — it only cares about the schema above.
+
+const STATIC_HOLIDAYS = [
+  // ── United States ──────────────────────────────────────────────
+  { market:'newyork',   date:'2025-01-01', type:'holiday', note:"New Year's Day" },
+  { market:'newyork',   date:'2025-01-20', type:'holiday', note:'MLK Day' },
+  { market:'newyork',   date:'2025-02-17', type:'holiday', note:"Presidents' Day" },
+  { market:'newyork',   date:'2025-04-18', type:'holiday', note:'Good Friday' },
+  { market:'newyork',   date:'2025-05-26', type:'holiday', note:'Memorial Day' },
+  { market:'newyork',   date:'2025-06-19', type:'holiday', note:'Juneteenth' },
+  { market:'newyork',   date:'2025-07-04', type:'holiday', note:'Independence Day' },
+  { market:'newyork',   date:'2025-07-03', type:'half',    close:{h:13,m:0}, note:'Independence Day Eve' },
+  { market:'newyork',   date:'2025-09-01', type:'holiday', note:'Labor Day' },
+  { market:'newyork',   date:'2025-11-27', type:'holiday', note:'Thanksgiving' },
+  { market:'newyork',   date:'2025-11-28', type:'half',    close:{h:13,m:0}, note:'Black Friday' },
+  { market:'newyork',   date:'2025-12-24', type:'half',    close:{h:13,m:0}, note:'Christmas Eve' },
+  { market:'newyork',   date:'2025-12-25', type:'holiday', note:'Christmas Day' },
+  { market:'chicago',   date:'2025-12-25', type:'holiday', note:'Christmas Day' },
+  { market:'chicago',   date:'2025-01-01', type:'holiday', note:"New Year's Day" },
+  // ── United Kingdom ─────────────────────────────────────────────
+  { market:'london',    date:'2025-01-01', type:'holiday', note:"New Year's Day" },
+  { market:'london',    date:'2025-04-18', type:'holiday', note:'Good Friday' },
+  { market:'london',    date:'2025-04-21', type:'holiday', note:'Easter Monday' },
+  { market:'london',    date:'2025-05-05', type:'holiday', note:'Early May BH' },
+  { market:'london',    date:'2025-05-26', type:'holiday', note:'Spring BH' },
+  { market:'london',    date:'2025-08-25', type:'holiday', note:'Summer BH' },
+  { market:'london',    date:'2025-12-25', type:'holiday', note:'Christmas Day' },
+  { market:'london',    date:'2025-12-26', type:'holiday', note:'Boxing Day' },
+  // ── Germany ────────────────────────────────────────────────────
+  { market:'frankfurt', date:'2025-01-01', type:'holiday', note:"New Year's Day" },
+  { market:'frankfurt', date:'2025-04-18', type:'holiday', note:'Good Friday' },
+  { market:'frankfurt', date:'2025-04-21', type:'holiday', note:'Easter Monday' },
+  { market:'frankfurt', date:'2025-05-01', type:'holiday', note:'Labour Day' },
+  { market:'frankfurt', date:'2025-12-24', type:'half',    close:{h:14,m:0}, note:'Christmas Eve' },
+  { market:'frankfurt', date:'2025-12-25', type:'holiday', note:'Christmas Day' },
+  { market:'frankfurt', date:'2025-12-31', type:'half',    close:{h:14,m:0}, note:"New Year's Eve" },
+  // ── Japan ──────────────────────────────────────────────────────
+  { market:'tokyo',     date:'2025-01-01', type:'holiday', note:"New Year's Day" },
+  { market:'tokyo',     date:'2025-01-13', type:'holiday', note:'Coming of Age Day' },
+  { market:'tokyo',     date:'2025-02-11', type:'holiday', note:'National Foundation Day' },
+  { market:'tokyo',     date:'2025-04-29', type:'holiday', note:'Showa Day' },
+  { market:'tokyo',     date:'2025-05-03', type:'holiday', note:'Constitution Day' },
+  { market:'tokyo',     date:'2025-05-05', type:'holiday', note:"Children's Day" },
+  { market:'tokyo',     date:'2025-08-11', type:'holiday', note:'Mountain Day' },
+  { market:'tokyo',     date:'2025-09-15', type:'holiday', note:'Respect for the Aged Day' },
+  { market:'tokyo',     date:'2025-11-03', type:'holiday', note:'Culture Day' },
+  { market:'tokyo',     date:'2025-11-23', type:'holiday', note:'Labour Thanksgiving Day' },
+  { market:'tokyo',     date:'2025-12-31', type:'holiday', note:"New Year's Eve" },
+  // ── Hong Kong ──────────────────────────────────────────────────
+  { market:'hongkong',  date:'2025-01-01', type:'holiday', note:"New Year's Day" },
+  { market:'hongkong',  date:'2025-01-29', type:'holiday', note:'Lunar New Year' },
+  { market:'hongkong',  date:'2025-04-18', type:'holiday', note:'Good Friday' },
+  { market:'hongkong',  date:'2025-04-21', type:'holiday', note:'Easter Monday' },
+  { market:'hongkong',  date:'2025-05-01', type:'holiday', note:'Labour Day' },
+  { market:'hongkong',  date:'2025-07-01', type:'holiday', note:'SAR Establishment Day' },
+  { market:'hongkong',  date:'2025-10-01', type:'holiday', note:'National Day' },
+  { market:'hongkong',  date:'2025-12-25', type:'holiday', note:'Christmas Day' },
+  // ── Australia ──────────────────────────────────────────────────
+  { market:'sydney',    date:'2025-01-01', type:'holiday', note:"New Year's Day" },
+  { market:'sydney',    date:'2025-01-27', type:'holiday', note:'Australia Day' },
+  { market:'sydney',    date:'2025-04-18', type:'holiday', note:'Good Friday' },
+  { market:'sydney',    date:'2025-04-21', type:'holiday', note:'Easter Monday' },
+  { market:'sydney',    date:'2025-04-25', type:'holiday', note:'ANZAC Day' },
+  { market:'sydney',    date:'2025-12-25', type:'holiday', note:'Christmas Day' },
+  { market:'sydney',    date:'2025-12-26', type:'holiday', note:'Boxing Day' },
+  // ── France ─────────────────────────────────────────────────────
+  { market:'paris',     date:'2025-01-01', type:'holiday', note:"New Year's Day" },
+  { market:'paris',     date:'2025-04-18', type:'holiday', note:'Good Friday' },
+  { market:'paris',     date:'2025-05-01', type:'holiday', note:'Labour Day' },
+  { market:'paris',     date:'2025-12-25', type:'holiday', note:'Christmas Day' },
+  // ── Canada ─────────────────────────────────────────────────────
+  { market:'toronto',   date:'2025-02-17', type:'holiday', note:'Family Day' },
+  { market:'toronto',   date:'2025-04-18', type:'holiday', note:'Good Friday' },
+  { market:'toronto',   date:'2025-05-19', type:'holiday', note:'Victoria Day' },
+  { market:'toronto',   date:'2025-07-01', type:'holiday', note:'Canada Day' },
+  { market:'toronto',   date:'2025-09-01', type:'holiday', note:'Labour Day' },
+  { market:'toronto',   date:'2025-10-13', type:'holiday', note:'Thanksgiving' },
+  { market:'toronto',   date:'2025-12-25', type:'holiday', note:'Christmas Day' },
+  { market:'toronto',   date:'2025-12-26', type:'holiday', note:'Boxing Day' },
+];
+
+// Merged holiday map: keyed as 'marketId|YYYY-MM-DD'
+// Populated from STATIC_HOLIDAYS on load, can be extended by mergeHolidays()
+const HOLIDAY_MAP = {};
+STATIC_HOLIDAYS.forEach(h => {
+  HOLIDAY_MAP[`${h.market}|${h.date}`] = h;
+});
+
+// API integration stub — replace body with a real fetch when ready:
+//   const data = await fetch('/api/holidays?year=2025').then(r => r.json());
+//   mergeHolidays(data);
+// The remote data should use the same schema as STATIC_HOLIDAYS.
+async function fetchHolidaysFromAPI() {
+  // TODO: swap stub for real endpoint
+  return [];
+}
+function mergeHolidays(entries) {
+  entries.forEach(h => { HOLIDAY_MAP[`${h.market}|${h.date}`] = h; });
+}
+// Kick off API fetch (silently fails if stub returns nothing)
+fetchHolidaysFromAPI().then(mergeHolidays).catch(() => {});
+
+// Look up today's holiday override for a given market.
+// Returns the entry or null. Uses the market's LOCAL date (DST-aware).
+function getTodayHoliday(market) {
+  const localDate = fmtDate(market.tz).format(_tickNow || new Date()); // 'YYYY-MM-DD'
+  return HOLIDAY_MAP[`${market.id}|${localDate}`]
+      || HOLIDAY_MAP[`*|${localDate}`]    // wildcard for global closures
+      || null;
+}
+
+function _computeMarketTimes(market, now) {
+  const localStr = fmtTime(market.tz).format(now);
+  const parts = localStr.match(/(\d+):(\d+):(\d+)/);
+  let h = +parts[1] % 24, m = +parts[2], s = +parts[3];
+
+  const loc = h * 60 + m;
+
+  // ── Holiday override ────────────────────────────────────────────
+  // Check HOLIDAY_MAP for today's date in the market's local timezone.
+  // This runs before status calculation so any override cleanly gates the logic.
+  const holiday = getTodayHoliday(market);
+  if (holiday?.type === 'holiday' || holiday?.type === 'closed') {
+    const displayTime = localStr.match(/(\d+:\d+:\d+)/)?.[1].replace(/^24/,'00') || '--:--:--';
+    const tzName = fmtTZName(market.tz).format(now).split(', ').pop();
+    return {
+      status: 'holiday',
+      holiday,
+      displayTime, tzName,
+      countdownStr: '--:--:--',
+      countdownLabel: holiday.note || 'Holiday',
+      countdownPhrase: holiday.note || 'Market closed today',
+      progress: 0
+    };
+  }
+
+  // For half-days, honour the override close time
+  const effectiveClose = (holiday?.type === 'half' && holiday.close)
+    ? holiday.close
+    : market.close;
+  const holidayNote = holiday?.type === 'half' ? holiday.note : null;
+
+  const openM = market.open.h * 60 + market.open.m;
+  const clsM  = effectiveClose.h * 60 + effectiveClose.m;
+  const preM  = openM - 60;
+
+  let status = 'closed';
+  if (loc >= openM && loc < clsM) status = 'open';
+  else if (loc >= preM && loc < openM) status = 'pre';
+
+  let secs, label, phrase;
+  if (status === 'open') {
+    secs = (clsM - loc)*60 - s;
+    label = holidayNote ? `Early close — ${holidayNote}` : 'Closes in';
+    phrase = holidayNote ? `Early close: ${pad(effectiveClose.h)}:${pad(effectiveClose.m)}` : `${market.name} closes in`;
+  } else if (status === 'pre') {
+    secs = (openM - loc)*60 - s; label = 'Opens in'; phrase = 'Pre-market ends in';
+  } else {
+    secs = (openM - loc)*60 - s;
+    if (secs < 0) secs += 86400;
+    label = 'Opens in'; phrase = `${market.name} opens in`;
+  }
+
+  const cdH = Math.floor(secs/3600), cdM = Math.floor((secs%3600)/60), cdS = secs%60;
+  let progress = 0;
+  if (status === 'open') progress = (loc - openM)/(clsM - openM);
+  else if (status === 'pre') progress = (loc - preM)/60;
+
+  const displayTime = localStr.match(/(\d+:\d+:\d+)/)?.[1].replace(/^24/,'00') || '--:--:--';
+  const tzName = fmtTZName(market.tz).format(now).split(', ').pop();
+
+  return {
+    status, holiday: holiday || null,
+    displayTime, tzName,
+    countdownStr: `${pad(cdH)}:${pad(cdM)}:${pad(cdS)}`,
+    countdownLabel: label, countdownPhrase: phrase,
+    progress: Math.min(1, Math.max(0, progress))
+  };
+}
+
+// Public API — use cache during ticks, compute fresh otherwise
+function getMarketTimes(market) {
+  if (_tickCache.has(market.id)) return _tickCache.get(market.id);
+  return _computeMarketTimes(market, new Date());
+}
+
+// ─── RENDER ───────────────────────────────────────────────────────
+function renderCard(m, t) {
+  const isOpen    = t.status === 'open';
+  const isPre     = t.status === 'pre';
+  const isHoliday = t.status === 'holiday';
+  const sCls    = isOpen ? 'is-open' : isPre ? 'is-pre' : isHoliday ? 'is-holiday' : 'is-closed';
+  const bCls    = isOpen ? 'badge-open' : isPre ? 'badge-pre' : isHoliday ? 'badge-holiday' : 'badge-closed';
+  const bLbl    = isOpen ? 'OPEN' : isPre ? 'PRE-MARKET' : isHoliday ? 'HOLIDAY' : 'CLOSED';
+  const tCls    = isOpen ? 'timer-open' : isPre ? 'timer-pre' : 'timer-closed';
+  const lc      = m.color || '#00e5a0';
+  const openVar = isOpen ? `--open:${lc};` : '';
+
+  const countdownDetail = isHoliday
+    ? (t.holiday?.note || 'Market holiday today')
+    : `${t.countdownLabel} ${t.countdownStr}`;
+  const cardAriaLabel = `${m.name}, ${m.exchange}, ${flagName(m.flag)}, ${bLbl}. ${countdownDetail}.`;
+  return `<div class="market-card ${sCls}" id="card-${m.id}" data-id="${m.id}"
+    role="listitem" tabindex="0" draggable="true"
+    aria-label="${cardAriaLabel}"
+    style="--live-color:${lc};${openVar}">
+
+    <div class="live-banner" aria-hidden="true">
+      <div class="live-dot-wrap"><div class="live-dot"></div></div>
+      LIVE SESSION
+    </div>
+    <div class="card-top">
+      <div>
+        <div class="market-flag" aria-label="${flagName(m.flag)}">${m.flag}</div>
+        <div class="market-name">${m.name}</div>
+        <div class="market-exchange">${m.exchange}</div>
+      </div>
+      <span class="status-badge ${bCls}">${bLbl}</span>
+    </div>
+    <div class="card-local-time" id="time-${m.id}" aria-label="Local time ${t.displayTime} ${t.tzName}">${t.displayTime}</div>
+    <div class="card-tz" aria-hidden="true">${t.tzName}</div>
+    <div class="card-countdown" aria-live="off" aria-atomic="true">
+      <div class="countdown-label">${t.countdownLabel}</div>
+      <div class="countdown-timer ${tCls}" id="cd-${m.id}">${t.countdownStr}</div>
+      <div class="countdown-phrase">${t.countdownPhrase}</div>
+    </div>
+    <div class="session-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(t.progress*100)}" aria-label="Session progress">
+      <div class="session-progress-fill" id="prog-${m.id}" style="transform:scaleX(${t.progress})"></div>
+    </div>
+    <div class="card-hours">
+      ${isHoliday
+        ? `<span class="holiday-note">⊘ ${t.holiday?.note || 'Market holiday'}</span>`
+        : `<span>Open ${pad(m.open.h)}:${pad(m.open.m)}</span>
+      <span>${t.holiday?.type === 'half' ? '½ ' : ''}Close ${pad((t.holiday?.close || m.close).h)}:${pad((t.holiday?.close || m.close).m)}</span>`
+      }
+    </div>
+    <div class="card-actions">
+      <button class="card-action-btn remove-btn" onclick="removeMarket('${m.id}')" aria-label="Remove ${m.name}">✕</button>
+    </div>
+  </div>`;
+}
+
+// Returns allMarkets sorted live-first (open → pre → closed),
+// preserving user-defined order within each group.
+// In edit mode we skip sorting so drag order is stable.
+// Search query filters by name, exchange, or country code.
+function getSortedMarkets() {
+  const rank = { open: 0, pre: 1, closed: 2, holiday: 2 };
+  return [...allMarkets].sort((a, b) => {
+    // getMarketTimesNow reads from tick cache — zero extra Intl calls
+    const ra = rank[getMarketTimesNow(a).status];
+    const rb = rank[getMarketTimesNow(b).status];
+    if (ra !== rb) return ra - rb;
+    return allMarkets.indexOf(a) - allMarkets.indexOf(b);
+  });
+}
+
+function renderAll() {
+  const grid = document.getElementById('markets-grid');
+
+  // Ensure tick cache is populated so renderCard reads computed times once
+  if (!_tickNow) beginTick();
+  const sorted = getSortedMarkets();
+
+  // Build all HTML as a single string — one innerHTML write, one reflow
+  const html = sorted.map(m => renderCard(m, getMarketTimesNow(m))).join('');
+  grid.innerHTML = html;
+
+  // Read cache for open status — no extra Intl calls
+  const anyOpen = sorted.some(m => getMarketTimesNow(m).status === 'open');
+  grid.classList.toggle('has-live', anyOpen);
+
+  // Clear ALL cached DOM refs after innerHTML replacement —
+  // stale card elements in _domCache would silently write to detached nodes.
+  // Grid-level refs (utc-clock, open-indicator, etc.) are stable and safe to keep.
+  const cardPrefixes = ['cd-', 'time-', 'prog-', 'card-'];
+  Object.keys(_domCache).forEach(k => {
+    if (cardPrefixes.some(p => k.startsWith(p))) delete _domCache[k];
+  });
+}
+
+// ─── USER TIMEZONE ────────────────────────────────────────────────
+const USER_TZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+const _localTimeFmt = new Intl.DateTimeFormat('en-GB', {
+  timeZone: USER_TZ, hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+});
+const _localTZFmt = new Intl.DateTimeFormat('en-US', {
+  timeZone: USER_TZ, timeZoneName: 'short'
+});
+
+function getLocalTimeStr(now) { return _localTimeFmt.format(now); }
+function getLocalTZName()     { return _localTZFmt.format(new Date()).split(', ').pop(); }
+
+// ─── TICK ─────────────────────────────────────────────────────────
+let prevSeconds  = -1;
+let prevMinute   = -1;
+let prevStatuses = '';  // stringified status snapshot for change detection
+
+// Cached DOM references — avoids getElementById on every tick
+const _domCache = {};
+function dom(id) { return _domCache[id] || (_domCache[id] = document.getElementById(id)); }
+
+// Intl formatter for UTC date — created once, reused
+const _utcDateFmt = new Intl.DateTimeFormat('en-GB', {
+  weekday:'long', year:'numeric', month:'long', day:'numeric', timeZone:'UTC'
+});
+
+function update() {
+  // ── Business logic phase ──────────────────────────────────────────
+  // Single Date.now() snapshot shared across the entire tick.
+  beginTick();  // sets _tickNow, clears _tickCache
+  const now = _tickNow;
+
+  const h = now.getUTCHours(), m = now.getUTCMinutes(), s = now.getUTCSeconds();
+  const secChanged = s !== prevSeconds;
+  prevSeconds = s;
+
+  // Pre-compute all market times in one pass, populating the tick cache.
+  // Every subsequent read (getSortedMarkets, renderAll, openCount) is free.
+  let openCount = 0;
+  const times = allMarkets.map(mkt => {
+    const t = getMarketTimesNow(mkt);
+    if (t.status === 'open') openCount++;
+    return t;
+  });
+
+  // Status-change check — triggers renderAll only when something actually opened/closed
+  checkAndRerenderOnStatusChange(times);
+
+  // ── Visual update phase (batched via rAF) ─────────────────────────
+  // Writing DOM changes in rAF prevents forced synchronous layouts.
+  requestAnimationFrame(() => {
+    // Local time display (auto-detected timezone)
+    const localClk = dom('local-clock');
+    if (localClk) localClk.textContent = getLocalTimeStr(now);
+    const tzLabel = dom('local-tz-label');
+    if (tzLabel && !tzLabel.dataset.set) {
+      tzLabel.textContent = getLocalTZName();
+      tzLabel.dataset.set = '1';
+    }
+
+    // UTC clock & date — only write if changed
+    const clockStr = `${pad(h)}:${pad(m)}:${pad(s)}`;
+    const clk = dom('utc-clock');
+    if (clk && clk.textContent !== clockStr) clk.textContent = clockStr;
+
+    // UTC date — update every minute (cheap Intl call, negligible cost)
+    if (secChanged && m !== prevMinute) {
+      prevMinute = m;
+      const dt = dom('utc-date');
+      if (dt) dt.textContent = _utcDateFmt.format(now);
+    }
+
+    // Per-card DOM patches — targeted writes, no innerHTML replacement
+    allMarkets.forEach((mkt, i) => {
+      const t  = times[i];
+      const cd = dom(`cd-${mkt.id}`);
+      if (!cd) return;  // card not yet rendered
+
+      // Countdown: only animate seconds digit, not the whole string
+      if (secChanged) {
+        const parts = t.countdownStr.split(':');
+        const secStr = parts[2] || '00';
+        cd.innerHTML = `${parts[0]}:${parts[1]}:<span class="cd-tick" key="${s}">${secStr}</span>`;
+        void cd.querySelector('.cd-tick')?.offsetWidth; // restart CSS animation
+      }
+
+      // Local time — changes every second but only write if different
+      const ti = dom(`time-${mkt.id}`);
+      if (ti && ti.textContent !== t.displayTime) ti.textContent = t.displayTime;
+
+      // Progress bar — transform is GPU-composited, cheaper than width
+      const pr = dom(`prog-${mkt.id}`);
+      if (pr) pr.style.transform = `scaleX(${t.progress})`;
+    });
+
+    // Open indicator — batch all three writes
+    const anyOpen = openCount > 0;
+    const indicator = dom('open-indicator');
+    if (indicator) {
+      indicator.classList.toggle('has-open', anyOpen);
+      const countEl = dom('open-count');
+      const labelEl = dom('open-label');
+      if (countEl) countEl.textContent = openCount;
+      if (labelEl) labelEl.textContent = openCount === 1 ? 'market open' : 'markets open';
+    }
+
+    dom('markets-grid')?.classList.toggle('has-live', anyOpen);
+    dom('orb')?.classList.toggle('orb-live', anyOpen);
+
+    // Now-line position
+    const nl = dom('now-line');
+    if (nl) nl.style.left = ((h + m/60 + s/3600) / 24 * 100) + '%';
+  });
+}
+
+// ─── TIMELINE ─────────────────────────────────────────────────────
+// Convert a market's local open/close hours into UTC fractional hours for today,
+// using Intl to account for DST automatically.
+function marketToUTC(tz, localH, localM) {
+  // Build a Date that represents today's date at localH:localM in the given timezone.
+  // Strategy: find today's date string in that timezone, then construct the UTC ms.
+  const now = new Date();
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz, year:'numeric', month:'2-digit', day:'2-digit'
+  }).format(now).split('-'); // 'YYYY-MM-DD'
+  const y = +parts[0], mo = +parts[1]-1, d = +parts[2];
+
+  // Create a date string and parse it as if it were in the target timezone
+  // by formatting UTC midnight of that local date and computing the offset.
+  const localNoon = new Date(Date.UTC(y, mo, d, localH, localM, 0));
+  // Format that UTC timestamp in the target timezone to see the local time it maps to
+  const check = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz, hour:'2-digit', minute:'2-digit', hour12: false
+  }).format(localNoon);
+  const [ch, cm] = check.split(':').map(Number);
+  // Compute the offset: how far off is our guess from desired local time?
+  const diffMin = (localH * 60 + localM) - (ch * 60 + cm);
+  // Adjust UTC timestamp by the difference
+  const utcMs = localNoon.getTime() + diffMin * 60000;
+  // Return as UTC fractional hours from midnight UTC today
+  const utcMidnight = Date.UTC(
+    now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()
+  );
+  return (utcMs - utcMidnight) / 3600000;
+}
+
+function buildTimeline() {
+  const tl = document.getElementById('timeline');
+  const nl = document.getElementById('now-line');
+  tl.innerHTML = '';
+
+  // Build segments dynamically from allMarkets + a fixed set of anchor markets
+  // so the timeline always reflects current DST offsets.
+  const anchors = [
+    { name:'Sydney', tz:'Australia/Sydney',  open:{h:10,m:0},  close:{h:16,m:0},  color:'#ff9f43' },
+    { name:'Tokyo',  tz:'Asia/Tokyo',         open:{h:9,m:0},   close:{h:15,m:30}, color:'#ff6b6b' },
+    { name:'SGX',    tz:'Asia/Singapore',     open:{h:9,m:0},   close:{h:17,m:0},  color:'#ffd32a' },
+    { name:'HK',     tz:'Asia/Hong_Kong',     open:{h:9,m:30},  close:{h:16,m:0},  color:'#ff4757' },
+    { name:'FRA',    tz:'Europe/Berlin',      open:{h:9,m:0},   close:{h:17,m:30}, color:'#7c6dfa' },
+    { name:'LON',    tz:'Europe/London',      open:{h:8,m:0},   close:{h:16,m:30}, color:'#00e5a0' },
+    { name:'NY',     tz:'America/New_York',   open:{h:9,m:30},  close:{h:16,m:0},  color:'#0099ff' },
+  ];
+
+  const segs = anchors.map(a => {
+    let utcO = marketToUTC(a.tz, a.open.h,  a.open.m);
+    let utcC = marketToUTC(a.tz, a.close.h, a.close.m);
+    // Wrap overnight sessions (e.g. Sydney opens Sunday evening UTC)
+    if (utcC < utcO) utcC += 24;
+    return { name: a.name, utcO, utcC, color: a.color };
+  });
+
+  const rows = [[],[],[]];
+  function rowFor(o, c) {
+    const o24 = ((o % 24) + 24) % 24;
+    const c24 = o24 + (c - o);
+    for (let r = 0; r < 3; r++) {
+      if (rows[r].every(([a,b]) => c24 <= a || o24 >= b)) {
+        rows[r].push([o24, c24]);
+        return r;
+      }
+    }
+    return 0;
+  }
+
+  const tHeight = 40; // matches CSS timeline height padding
+  const rh = 40 / 3;
+
+  segs.forEach(s => {
+    let o = ((s.utcO % 24) + 24) % 24;
+    let c = o + (s.utcC - s.utcO);
+    if (c > 24) c = 24; // clip at day boundary for display
+    const row = rowFor(s.utcO, s.utcC);
+    const el = document.createElement('div');
+    el.className = 'timeline-segment';
+    el.style.cssText = `left:${o/24*100}%;width:${(c-o)/24*100}%;background:${s.color};top:${row*rh+4}px;bottom:${(2-row)*rh+4}px;opacity:0.75;`;
+    el.textContent = s.name;
+    tl.appendChild(el);
+  });
+
+  tl.appendChild(nl);
+}
+
+
+// ─── REMOVE ───────────────────────────────────────────────────────
+function removeMarket(id) {
+  const market = allMarkets.find(m => m.id === id);
+  if (!market) return;
+  allMarkets = allMarkets.filter(m => m.id !== id);
+  renderAll();
+  saveState();
+  showToast(`${market.flag} ${market.name} removed`);
+  announceToSR(`${market.name} removed from your markets`);
+}
+
+// ─── LAYOUT / THEME ───────────────────────────────────────────────
+function setLayout(l) {
+  currentLayout = l;
+  const grid = document.getElementById('markets-grid');
+  const hasLive = grid.classList.contains('has-live');
+  grid.className = `markets-grid layout-${l}${hasLive ? ' has-live' : ''}`;
+  ['grid','list'].forEach(x => {
+    const btn = document.getElementById(`btn-${x}`);
+    btn.classList.toggle('active', x === l);
+    btn.setAttribute('aria-pressed', x === l ? 'true' : 'false');
+  });
+  saveState();
+}
+
+function toggleTheme() {
+  document.body.classList.toggle('light');
+  const isLight = document.body.classList.contains('light');
+  const btn = document.getElementById('theme-btn');
+  btn.textContent = isLight ? '◑' : '◐';
+  btn.setAttribute('aria-label', isLight ? 'Switch to dark mode' : 'Switch to light mode');
+  btn.setAttribute('aria-pressed', isLight ? 'true' : 'false');
+  saveState();
+}
+
+// ─── SEARCH ───────────────────────────────────────────────────────
+// ─── SEARCH & DROPDOWN ───────────────────────────────────────────
+let dropdownIndex = -1;
+
+function handleSearch(value) {
+  searchQuery = value.trim();
+  renderAll();
+  renderDropdown();
+}
+
+function openDropdown() {
+  renderDropdown();
+  document.getElementById('search-dropdown').classList.add('open');
+}
+
+function closeDropdown() {
+  // Delay so clicks on items register before hiding
+  setTimeout(() => {
+    document.getElementById('search-dropdown').classList.remove('open');
+    dropdownIndex = -1;
+  }, 150);
+}
+
+function renderDropdown() {
+  const dd = document.getElementById('search-dropdown');
+  const q  = (document.getElementById('search-input').value || '').trim().toLowerCase();
+
+  const filtered = allMarkets.filter(m => {
+    if (!q) return true;
+    const status = getMarketTimes(m).status;
+    const statusLabel = status === 'pre' ? 'pre pre-market' : status;
+    return (
+      m.name.toLowerCase().includes(q) ||
+      (m.exchange || '').toLowerCase().includes(q) ||
+      (m.flag || '').toLowerCase().includes(q) ||
+      (m.region || '').toLowerCase().includes(q) ||
+      (m.tz || '').toLowerCase().includes(q) ||
+      statusLabel.includes(q)
+    );
+  });
+
+  if (filtered.length === 0) {
+    dd.innerHTML = `<div class="search-dropdown-item" style="color:var(--muted);cursor:default">No markets match</div>`;
+    dropdownIndex = -1;
+    return;
+  }
+
+  // Group by status for empty query (show all), flat list when filtering
+  let html = '';
+  if (!q) {
+    const groups = [
+      { label: 'Open',       items: filtered.filter(m => getMarketTimes(m).status === 'open') },
+      { label: 'Pre-Market', items: filtered.filter(m => getMarketTimes(m).status === 'pre')  },
+      { label: 'Closed',     items: filtered.filter(m => getMarketTimes(m).status === 'closed')},
+    ];
+    let first = true;
+    groups.forEach(g => {
+      if (!g.items.length) return;
+      if (!first) html += `<div class="search-dropdown-divider"></div>`;
+      html += `<div class="search-dropdown-section">${g.label}</div>`;
+      g.items.forEach((m, i) => { html += dropdownItem(m, i); });
+      first = false;
+    });
+  } else {
+    filtered.forEach((m, i) => { html += dropdownItem(m, i); });
+  }
+
+  dd.innerHTML = html;
+  dropdownIndex = -1;
+}
+
+function dropdownItem(m, i) {
+  const status = getMarketTimes(m).status;
+  const statusLabel = status === 'pre' ? 'PRE' : status.toUpperCase();
+  return `<div class="search-dropdown-item" data-id="${m.id}" onmousedown="selectDropdownItem('${m.id}')">
+    <span class="search-dropdown-flag">${m.flag}</span>
+    <span class="search-dropdown-name">${m.name}</span>
+    <span class="search-dropdown-status ${status}">${statusLabel}</span>
+  </div>`;
+}
+
+function selectDropdownItem(id) {
+  // Clear search, close dropdown, scroll card into view
+  const input = document.getElementById('search-input');
+  input.value = '';
+  searchQuery = '';
+  renderAll();
+  document.getElementById('search-dropdown').classList.remove('open');
+  // Highlight and scroll to selected card
+  setTimeout(() => {
+    const card = document.getElementById(`card-${id}`);
+    if (card) {
+      card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      card.classList.add('card-highlight');
+      setTimeout(() => card.classList.remove('card-highlight'), 1200);
+    }
+  }, 50);
+}
+
+function dropdownKeyNav(e) {
+  const dd = document.getElementById('search-dropdown');
+  const items = dd.querySelectorAll('.search-dropdown-item[data-id]');
+  if (!items.length) return;
+
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    dropdownIndex = Math.min(dropdownIndex + 1, items.length - 1);
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    dropdownIndex = Math.max(dropdownIndex - 1, 0);
+  } else if (e.key === 'Enter' && dropdownIndex >= 0) {
+    e.preventDefault();
+    selectDropdownItem(items[dropdownIndex].dataset.id);
+    document.getElementById('search-input').blur();
+    return;
+  } else if (e.key === 'Escape') {
+    document.getElementById('search-input').blur();
+    return;
+  } else { return; }
+
+  items.forEach((el, i) => el.classList.toggle('active', i === dropdownIndex));
+  items[dropdownIndex]?.scrollIntoView({ block: 'nearest' });
+}
+const MAX_MARKETS = 8;
+
+const TZ_TO_CODE = {
+  'Asia/Dubai':           'AE',
+  'Asia/Kolkata':         'IN',
+  'Asia/Shanghai':        'CN',
+  'Asia/Seoul':           'KR',
+  'Asia/Taipei':          'TW',
+  'Europe/Paris':         'FR',
+  'Europe/Zurich':        'CH',
+  'Europe/Moscow':        'RU',
+  'America/Chicago':      'US',
+  'America/Los_Angeles':  'US',
+  'America/Sao_Paulo':    'BR',
+  'Africa/Johannesburg':  'ZA',
+  'Pacific/Auckland':     'NZ',
+};
+
+function autoFillCode() {
+  const tz = document.getElementById('city-tz').value;
+  const flagEl = document.getElementById('city-flag');
+  // Only auto-fill if the user hasn't typed something custom
+  const current = flagEl.value.trim();
+  const prevAuto = flagEl.dataset.auto || '';
+  if (!current || current === prevAuto) {
+    const code = TZ_TO_CODE[tz] || '';
+    flagEl.value = code;
+    flagEl.dataset.auto = code;
+  }
+}
+
+function visibleCount() {
+  return allMarkets.length;
+}
+
+function openModal() {
+  if (visibleCount() >= MAX_MARKETS) {
+    showToast(`Max ${MAX_MARKETS} markets — remove one to add another`);
+    return;
+  }
+  document.getElementById('modal-search').value = '';
+  renderDirectory('');
+  const modal = document.getElementById('modal');
+  modal.classList.add('open');
+  modal.removeAttribute('aria-hidden');
+  // Store previously focused element so we can restore on close
+  modal._returnFocus = document.activeElement;
+  setTimeout(() => document.getElementById('modal-search')?.focus(), 50);
+}
+function closeModal() { document.getElementById('modal').classList.remove('open'); }
+
+function buildSwatches() {
+  const wrap = document.getElementById('color-swatches');
+  wrap.innerHTML = '';
+  SWATCHES.forEach(c => {
+    const el = document.createElement('div');
+    el.className = 'color-swatch' + (c === selColor ? ' selected' : '');
+    el.style.background = c;
+    el.setAttribute('tabindex', '0');
+    el.setAttribute('role', 'radio');
+    el.setAttribute('aria-label', `Accent color ${c}`);
+    el.setAttribute('aria-checked', c === selColor ? 'true' : 'false');
+    const selectSwatch = () => {
+      selColor = c;
+      wrap.querySelectorAll('.color-swatch').forEach(x => {
+        x.classList.remove('selected');
+        x.setAttribute('aria-checked', 'false');
+      });
+      el.classList.add('selected');
+      el.setAttribute('aria-checked', 'true');
+    };
+    el.onclick = selectSwatch;
+    el.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectSwatch(); } };
+    wrap.appendChild(el);
+  });
+}
+
+function parseHM(str) {
+  const [h,m] = (str||'09:00').split(':').map(Number);
+  return { h: isNaN(h)?9:h, m: isNaN(m)?0:m };
+}
+
+function addCustomCity() {
+  const raw      = document.getElementById('city-name').value.trim();
+  const name     = raw ? raw.charAt(0).toUpperCase() + raw.slice(1) : '';
+  const rawFlag  = document.getElementById('city-flag').value.trim().toUpperCase();
+  // Strip any non-ASCII (emoji) characters — keep only letters/digits
+  const flag     = rawFlag.replace(/[^\x00-\x7F]/g, '').slice(0, 4) || '??';
+  const exchange = document.getElementById('city-exchange').value.trim() || 'Custom';
+  const tz       = document.getElementById('city-tz').value;
+  const openT    = parseHM(document.getElementById('city-open').value);
+  const closeT   = parseHM(document.getElementById('city-close').value);
+  if (!name) { document.getElementById('city-name').focus(); return; }
+  if (visibleCount() >= MAX_MARKETS) {
+    closeModal();
+    showToast(`Max ${MAX_MARKETS} markets — remove one to add another`);
+    return;
+  }
+
+  allMarkets.push({
+    id: 'c' + Date.now(),
+    name, flag, exchange, tz, custom: true,
+    open: openT, close: closeT,
+    color: selColor
+  });
+  closeModal();
+  renderAll();
+  saveState();
+  const remaining = MAX_MARKETS - visibleCount();
+  showToast(remaining > 0 ? `${flag} ${name} added · ${remaining} slot${remaining === 1 ? '' : 's'} left` : `${flag} ${name} added · market limit reached`);
+  ['city-name','city-flag','city-exchange'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('city-flag').dataset.auto = '';
+  document.getElementById('city-open').value  = '09:00';
+  document.getElementById('city-close').value = '17:00';
+}
+
+document.getElementById('modal').addEventListener('click', e => {
+  if (e.target.id === 'modal') closeModal();
+});
+// Escape key closes modal
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && document.getElementById('modal').classList.contains('open')) {
+    closeModal();
+  }
+});
+// Focus trap: keep Tab/Shift+Tab inside open modal
+document.getElementById('modal').addEventListener('keydown', e => {
+  if (e.key !== 'Tab') return;
+  const modal = document.getElementById('modal');
+  const focusable = [...modal.querySelectorAll(
+    'button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+  )].filter(el => el.offsetParent !== null);
+  if (!focusable.length) return;
+  const first = focusable[0], last = focusable[focusable.length - 1];
+  if (e.shiftKey && document.activeElement === first) {
+    e.preventDefault(); last.focus();
+  } else if (!e.shiftKey && document.activeElement === last) {
+    e.preventDefault(); first.focus();
+  }
+});
+
+// ─── TOAST ────────────────────────────────────────────────────────
+let toastTimer;
+function showToast(msg) {
+  const t = document.getElementById('save-toast');
+  t.textContent = '✓ ' + msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2400);
+}
+
+
+// ─── CARD KEYBOARD INTERACTION ────────────────────────────────────
+// Cards are focusable (tabindex=0). Enter/Space announces detail.
+// Delete/Backspace prompts removal with a confirm step.
+document.getElementById('markets-grid').addEventListener('keydown', e => {
+  const card = e.target.closest('.market-card');
+  if (!card) return;
+  if (e.key === 'Enter' || e.key === ' ') {
+    e.preventDefault();
+    // Toggle card-actions visibility for keyboard users
+    const actions = card.querySelector('.card-actions');
+    if (actions) {
+      const showing = card.classList.contains('kb-actions');
+      card.classList.toggle('kb-actions', !showing);
+      if (!showing) {
+        actions.querySelector('button')?.focus();
+        announceToSR(`Actions shown for ${card.getAttribute('aria-label') || 'market'}. Press Escape to dismiss.`);
+      }
+    }
+  }
+  if (e.key === 'Escape') {
+    card.classList.remove('kb-actions');
+    card.focus();
+  }
+});
+
+
+// ─── PWA SERVICE WORKER ───────────────────────────────────────────
+// Registers an inline service worker via a Blob URL.
+// Caches the app shell on install; serves from cache on fetch.
+// Works even in a single-file HTML context with no separate SW file.
+if ('serviceWorker' in navigator) {
+  const swCode = `
+    const CACHE = 'tradehours-v1';
+    const ASSETS = [self.location.href]; // cache this HTML file
+
+    self.addEventListener('install', e => {
+      e.waitUntil(
+        caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting())
+      );
+    });
+
+    self.addEventListener('activate', e => {
+      e.waitUntil(
+        caches.keys().then(keys =>
+          Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
+        ).then(() => self.clients.claim())
+      );
+    });
+
+    self.addEventListener('fetch', e => {
+      // Network-first for same-origin; cache fallback for offline
+      if (e.request.url.startsWith(self.location.origin)) {
+        e.respondWith(
+          fetch(e.request)
+            .then(res => {
+              const clone = res.clone();
+              caches.open(CACHE).then(c => c.put(e.request, clone));
+              return res;
+            })
+            .catch(() => caches.match(e.request))
+        );
+      }
+    });
+  `;
+  const blob = new Blob([swCode], { type: 'application/javascript' });
+  const swUrl = URL.createObjectURL(blob);
+  navigator.serviceWorker.register(swUrl, { type: 'classic' })
+    .then(() => URL.revokeObjectURL(swUrl))
+    .catch(() => {}); // fail silently — app works without SW
+}
+
+// ─── WEEKEND DETECTION ────────────────────────────────────────────
+function updateWeekendState() {
+  const dow = new Date().getUTCDay(); // 0=Sun, 6=Sat
+  const isWeekend = dow === 0 || dow === 6;
+  const grid = document.getElementById('markets-grid');
+  if (grid) grid.classList.toggle('is-weekend', isWeekend);
+
+  let banner = document.getElementById('weekend-banner');
+  if (isWeekend) {
+    if (!banner) {
+      banner = document.createElement('div');
+      banner.id = 'weekend-banner';
+      banner.className = 'weekend-banner';
+      banner.setAttribute('aria-live', 'polite');
+      grid.parentElement.insertBefore(banner, grid);
+    }
+    const dayName = dow === 6 ? 'Saturday' : 'Sunday';
+    banner.textContent = `${dayName} — Global markets closed · Opens Monday`;
+  } else if (banner) {
+    banner.remove();
+  }
+}
+
+// ─── DRAG TO REORDER ──────────────────────────────────────────────
+let _dragId = null;
+
+function initDragListeners() {
+  const grid = document.getElementById('markets-grid');
+  if (!grid || grid._dragInit) return;
+  grid._dragInit = true;
+
+  grid.addEventListener('dragstart', e => {
+    const card = e.target.closest('.market-card');
+    if (!card) return;
+    _dragId = card.dataset.id;
+    card.classList.add('drag-source');
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', _dragId);
+  });
+
+  grid.addEventListener('dragend', () => {
+    document.querySelectorAll('.market-card.drag-source, .market-card.drag-over')
+      .forEach(c => c.classList.remove('drag-source', 'drag-over'));
+    _dragId = null;
+  });
+
+  grid.addEventListener('dragover', e => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const card = e.target.closest('.market-card');
+    if (!card || card.dataset.id === _dragId) return;
+    document.querySelectorAll('.market-card.drag-over')
+      .forEach(c => c.classList.remove('drag-over'));
+    card.classList.add('drag-over');
+  });
+
+  grid.addEventListener('dragleave', e => {
+    const card = e.target.closest('.market-card');
+    if (card && !card.contains(e.relatedTarget)) card.classList.remove('drag-over');
+  });
+
+  grid.addEventListener('drop', e => {
+    e.preventDefault();
+    const target = e.target.closest('.market-card');
+    if (!target || !_dragId || target.dataset.id === _dragId) return;
+    const si = allMarkets.findIndex(m => m.id === _dragId);
+    const ti = allMarkets.findIndex(m => m.id === target.dataset.id);
+    if (si < 0 || ti < 0) return;
+    const [moved] = allMarkets.splice(si, 1);
+    allMarkets.splice(ti, 0, moved);
+    prevStatuses = '';
+    renderAll();
+    saveState();
+    announceToSR(`${moved.name} moved to position ${ti + 1}`);
+  });
+}
+
+// ─── AMBIENT LIGHT ADAPTATION ─────────────────────────────────────
+// Uses the AmbientLightSensor API where available (Chrome on Android/
+// some laptops with light sensors). Falls back gracefully on unsupported
+// browsers — the app works identically, just without auto-dimming.
+//
+// Lux scale reference:
+//   > 200 lux  — bright office / daylight              → no dim
+//   20–200 lux — dim room / evening lamp               → dim-1 (82%)
+//   5–20 lux   — dark room / candlelight               → dim-2 (62%)
+//   < 5 lux    — very dark / near-dark                 → dim-3 (42%)
+//
+// The dim indicator (🌕/🌔/🌓/🌒) lives in the header and shows current
+// level. Clicking it cycles manual override or resets to auto.
+
+let _ambientAuto   = true;   // false when user has manually overridden
+let _ambientLevel  = 0;      // 0–3
+let _ambientSensor = null;
+
+function setAmbientLevel(level) {
+  if (level === _ambientLevel) return;
+  _ambientLevel = level;
+  document.body.classList.remove('ambient-dim-1', 'ambient-dim-2', 'ambient-dim-3');
+  if (level > 0) document.body.classList.add(`ambient-dim-${level}`);
+  updateAmbientIndicator();
+  // Persist manual overrides across sessions
+  if (!_ambientAuto) localStorage.setItem('mcp_ambient', level);
+}
+
+function luxToLevel(lux) {
+  if (lux > 200) return 0;
+  if (lux > 20)  return 1;
+  if (lux > 5)   return 2;
+  return 3;
+}
+
+function updateAmbientIndicator() {
+  const btn = document.getElementById('ambient-btn');
+  if (!btn) return;
+  const icons = ['○', '◔', '◑', '◕'];   // empty → progressively filled
+  btn.textContent  = icons[_ambientLevel];
+  const labels = ['Screen brightness: auto', 'Screen dimmed: dim room', 'Screen dimmed: dark room', 'Screen dimmed: very dark'];
+  btn.setAttribute('aria-label', labels[_ambientLevel] + ' — click to override');
+  btn.classList.toggle('ambient-active', _ambientLevel > 0);
+}
+
+function initAmbientLight() {
+  // ── Restore manual override if previously set ──────────────────
+  const saved = localStorage.getItem('mcp_ambient');
+  if (saved !== null) {
+    _ambientAuto = false;
+    setAmbientLevel(+saved);
+  }
+
+  // ── Ambient Light Sensor API ───────────────────────────────────
+  if ('AmbientLightSensor' in window) {
+    try {
+      _ambientSensor = new AmbientLightSensor({ frequency: 0.5 }); // 2s interval
+      _ambientSensor.addEventListener('reading', () => {
+        if (!_ambientAuto) return; // respect manual override
+        setAmbientLevel(luxToLevel(_ambientSensor.illuminance));
+      });
+      _ambientSensor.addEventListener('error', e => {
+        if (e.error.name === 'NotAllowedError') {
+          console.info('TradeHours: ambient light permission denied');
+        }
+      });
+
+      // Request permission (required in some browsers)
+      if (navigator.permissions) {
+        navigator.permissions.query({ name: 'ambient-light-sensor' })
+          .then(result => {
+            if (result.state !== 'denied') _ambientSensor.start();
+          })
+          .catch(() => _ambientSensor.start()); // try anyway
+      } else {
+        _ambientSensor.start();
+      }
+    } catch (e) {
+      // Sensor not available on this device — silent fallback
+    }
+  }
+
+  // ── CSS media fallback (no sensor needed) ─────────────────────
+  // If the OS reports dark preference AND the sensor isn't running,
+  // apply a mild dim to signal the user the feature is supported.
+  // (Many OSes set dark mode automatically at sunset / low light.)
+  if (!_ambientSensor && _ambientAuto) {
+    const darkMQ = window.matchMedia('(prefers-color-scheme: dark)');
+    const applyMediaDim = mq => {
+      if (!_ambientAuto) return;
+      // Only apply subtle dim if the app is already in dark mode
+      const appIsDark = !document.body.classList.contains('light');
+      setAmbientLevel(mq.matches && appIsDark ? 1 : 0);
+    };
+    applyMediaDim(darkMQ);
+    darkMQ.addEventListener('change', applyMediaDim);
+  }
+}
+
+// Manual override button — cycles 0→1→2→3→0, disables auto
+function cycleAmbientDim() {
+  _ambientAuto = false;
+  const next = (_ambientLevel + 1) % 4;
+  setAmbientLevel(next);
+  // Re-enable auto if user cycles back to 0
+  if (next === 0) {
+    _ambientAuto = true;
+    localStorage.removeItem('mcp_ambient');
+    // Restart sensor if available
+    if (_ambientSensor) _ambientSensor.start();
+  }
+  announceToSR(`Screen brightness: ${['auto', 'dim', 'dark', 'very dark'][next]}`);
+}
+
+// ─── INIT ─────────────────────────────────────────────────────────
+loadState();
+currentLayout = currentLayout || 'grid'; // grid is always the default
+setLayout(currentLayout);
+renderAll();
+initDragListeners();  // one-time drag setup on the persistent grid element
+buildTimeline();
+update();
+setInterval(update, 1000);
+// Rebuild timeline every minute — keeps now-line position and DST offsets current
+setInterval(buildTimeline, 60000);
+// Weekend state — check once on load and then every minute
+updateWeekendState();
+setInterval(updateWeekendState, 60000);
+initAmbientLight();
+
+
+// Re-sort when market status changes — checked on each tick via prevStatuses.
+// No separate interval needed; update() already computes all statuses.
+// renderAll() is called from update() only when statuses actually change.
+function checkAndRerenderOnStatusChange(times) {
+  const key = times.map(t => t.status).join(',');
+  if (key !== prevStatuses) {
+    prevStatuses = key;
+    renderAll();
+    // Invalidate dom cache for cards since innerHTML changed
+    allMarkets.forEach(m => {
+      delete _domCache[`cd-${m.id}`];
+      delete _domCache[`time-${m.id}`];
+      delete _domCache[`prog-${m.id}`];
+    });
+  }
+}
+</script>
+</body>
+</html>
