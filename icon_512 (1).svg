@@ -1,0 +1,94 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bgGrad2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0D1B14"/>
+      <stop offset="100%" style="stop-color:#081510"/>
+    </linearGradient>
+    <linearGradient id="arcGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#00C896"/>
+      <stop offset="100%" style="stop-color:#009F72"/>
+    </linearGradient>
+    <filter id="glow2">
+      <feGaussianBlur stdDeviation="5" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="blob">
+      <feGaussianBlur stdDeviation="20" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="512" height="512" rx="100" ry="100" fill="url(#bgGrad2)"/>
+
+  <!-- Glow behind clock -->
+  <circle cx="256" cy="230" r="130" fill="#00C896" opacity="0.07" filter="url(#blob)"/>
+
+  <!-- Clock outer ring (track) -->
+  <circle cx="256" cy="230" r="140" fill="none" stroke="#1A3D2E" stroke-width="12"/>
+
+  <!-- Clock arc (active segment - ~75% of circle, clockwise from top) -->
+  <!-- 270deg start, 270 + 270 = 540 = 180deg end. Large arc. -->
+  <path d="M 256 90
+    A 140 140 0 1 1 116 230"
+    fill="none" stroke="url(#arcGrad)" stroke-width="12"
+    stroke-linecap="round" filter="url(#glow2)"/>
+
+  <!-- Clock tick marks -->
+  <g stroke="#1A3D2E" stroke-width="3">
+    <!-- 12 -->  <line x1="256" y1="102" x2="256" y2="118"/>
+    <!-- 3 -->   <line x1="388" y1="230" x2="372" y2="230"/>
+    <!-- 6 -->   <line x1="256" y1="358" x2="256" y2="342"/>
+    <!-- 9 -->   <line x1="124" y1="230" x2="140" y2="230"/>
+    <!-- 1 -->   <line x1="326" y1="113" x2="319" y2="127"/>
+    <!-- 2 -->   <line x1="375" y1="160" x2="363" y2="168"/>
+    <!-- 4 -->   <line x1="375" y1="300" x2="363" y2="292"/>
+    <!-- 5 -->   <line x1="326" y1="347" x2="319" y2="333"/>
+    <!-- 7 -->   <line x1="186" y1="347" x2="193" y2="333"/>
+    <!-- 8 -->   <line x1="137" y1="300" x2="149" y2="292"/>
+    <!-- 10 --> <line x1="137" y1="160" x2="149" y2="168"/>
+    <!-- 11 --> <line x1="186" y1="113" x2="193" y2="127"/>
+  </g>
+
+  <!-- Clock hands -->
+  <!-- Hour hand pointing ~to 10 -->
+  <line x1="256" y1="230" x2="196" y2="168" stroke="#00C896" stroke-width="8" stroke-linecap="round" filter="url(#glow2)"/>
+  <!-- Minute hand pointing ~to 2 -->
+  <line x1="256" y1="230" x2="316" y2="154" stroke="#FFFFFF" stroke-width="5" stroke-linecap="round" opacity="0.85"/>
+  <!-- Center dot -->
+  <circle cx="256" cy="230" r="10" fill="#00C896" filter="url(#glow2)"/>
+  <circle cx="256" cy="230" r="5" fill="#FFFFFF"/>
+
+  <!-- Market region dots row -->
+  <g>
+    <!-- NYC open -->
+    <circle cx="138" cy="408" r="14" fill="#00C896" opacity="0.9" filter="url(#glow2)"/>
+    <text x="138" y="437" font-family="'Helvetica Neue', Arial, sans-serif" font-size="16" text-anchor="middle" fill="#00C896" opacity="0.7">NY</text>
+
+    <!-- LDN open -->
+    <circle cx="196" cy="408" r="14" fill="#00C896" opacity="0.9" filter="url(#glow2)"/>
+    <text x="196" y="437" font-family="'Helvetica Neue', Arial, sans-serif" font-size="16" text-anchor="middle" fill="#00C896" opacity="0.7">LD</text>
+
+    <!-- TYO closed -->
+    <circle cx="256" cy="408" r="14" fill="#1A3D2E" opacity="0.9"/>
+    <text x="256" y="437" font-family="'Helvetica Neue', Arial, sans-serif" font-size="16" text-anchor="middle" fill="#4A6D5A" opacity="0.7">TY</text>
+
+    <!-- SGX closed -->
+    <circle cx="316" cy="408" r="14" fill="#1A3D2E" opacity="0.9"/>
+    <text x="316" y="437" font-family="'Helvetica Neue', Arial, sans-serif" font-size="16" text-anchor="middle" fill="#4A6D5A" opacity="0.7">SG</text>
+
+    <!-- ASX open -->
+    <circle cx="376" cy="408" r="14" fill="#00C896" opacity="0.9" filter="url(#glow2)"/>
+    <text x="376" y="437" font-family="'Helvetica Neue', Arial, sans-serif" font-size="16" text-anchor="middle" fill="#00C896" opacity="0.7">AS</text>
+  </g>
+
+  <!-- "TH" monogram -->
+  <text x="256" y="96" font-family="'Helvetica Neue', Arial, sans-serif" font-size="42" font-weight="800"
+    text-anchor="middle" fill="#00C896" letter-spacing="4" opacity="0.5">TRADEHOURS</text>
+</svg>
