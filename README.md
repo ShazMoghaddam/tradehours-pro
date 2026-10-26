@@ -79,15 +79,7 @@ All data lives inside the single HTML file. You can:
 
 ## License
 
-This software is sold under a **Personal / Commercial Use License**.  
-See [LICENSE.md](LICENSE.md) for full terms.
-
-**In short:**
-- ✅ Use on your own devices
-- ✅ Use for personal or commercial trading workflows
-- ✅ Customise for your own use
-- ❌ Do not redistribute, resell, or share the file with others
-- ❌ Do not remove copyright notices
+Released under the [MIT licence](./LICENSE). Free to use, change and share, including commercially, as long as the licence and copyright notice stay with it.
 
 ---
 
