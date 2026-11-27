@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en-GB">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>TradeHours</title>
+<title>TradeHours Pro: Global Market Hours</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   :root {
@@ -204,7 +204,7 @@
     border-radius: 14px; padding: 18px 22px; margin-bottom: 24px; overflow: hidden;
   }
   .session-bar-title { font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); font-family: 'JetBrains Mono', monospace; margin-bottom: 12px; }
-  .timeline { position: relative; height: 48px; background: var(--surface2); border-radius: 8px; overflow: hidden; }
+  .timeline { position: relative; height: 64px; background: var(--surface2); border-radius: 8px; overflow: hidden; }
   .timeline-segment {
     position: absolute; top: 4px; bottom: 4px; border-radius: 5px;
     display: flex; align-items: center; justify-content: center;
@@ -223,6 +223,10 @@
   }
   .timeline-hours { display: flex; justify-content: space-between; margin-top: 5px; padding: 0 2px; }
   .timeline-hours span { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--muted); }
+  .holiday-coverage { margin: 10px 2px 0; font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: .3px; color: var(--muted); }
+  .holiday-coverage.is-stale { color: #ffb020; }
+  .weekend-banner { margin: 0 0 14px; padding: 12px 16px; border-radius: 12px; border: 1px dashed var(--border, rgba(255,255,255,.12));
+    background: var(--surface); color: var(--muted); font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: .3px; text-align: center; }
 
   .edit-actions { display: flex; gap: 8px; }
 
@@ -868,7 +872,7 @@
 
     /* ── Session timeline ── */
     .session-bar-wrap  { padding: 12px 14px; margin-bottom: 14px; }
-    .timeline          { height: 38px; }
+    .timeline          { height: 56px; }
     /* Hide some hour labels to prevent crowding — keep every other */
     .timeline-hours span:nth-child(even) { visibility: hidden; }
     .timeline-hours { margin-top: 4px; }
@@ -1105,16 +1109,19 @@
 
 </style>
   <!-- PWA -->
-  <link rel="manifest" href="data:application/manifest+json,{
-    %22name%22:%22TradeHours%22,
-    %22short_name%22:%22TradeHours%22,
-    %22start_url%22:%22.%22,
-    %22display%22:%22standalone%22,
-    %22background_color%22:%22%230f1318%22,
-    %22theme_color%22:%22%230f1318%22,
-    %22description%22:%22Live global market hours and trading sessions%22,
-    %22icons%22:[{%22src%22:%22data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='112' fill='%230f1318'/%3E%3Ctext y='360' x='50' font-size='380' font-family='serif'%3E📈%3C/text%3E%3C/svg%3E%22,%22sizes%22:%22512x512%22,%22type%22:%22image/svg+xml%22}]
-  }" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" type="image/svg+xml" href="icon.svg" />
+  <link rel="apple-touch-icon" href="icon.svg" />
+  <meta name="description" content="TradeHours Pro: live global market hours, session countdowns and exchange holidays for 25 markets. By Shaz Moghaddam." />
+  <meta name="author" content="Shaz Moghaddam" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="TradeHours Pro: Global Market Hours" />
+  <meta property="og:description" content="Which markets are open now, when the next one opens, and which are on holiday." />
+  <meta property="og:url" content="https://shazmoghaddam.github.io/tradehours-pro/" />
+  <meta property="og:image" content="https://shazmoghaddam.github.io/tradehours-pro/assets/social-preview.png" />
+  <meta property="og:image:width" content="1280" />
+  <meta property="og:image:height" content="640" />
+  <meta name="twitter:card" content="summary_large_image" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -1171,6 +1178,7 @@
       <span>00</span><span>03</span><span>06</span><span>09</span>
       <span>12</span><span>15</span><span>18</span><span>21</span><span>24</span>
     </div>
+    <p class="holiday-coverage" id="holiday-coverage"></p>
   </div>
 
   <main id="main-content" aria-label="Market cards">
@@ -1192,7 +1200,7 @@
 
 <script>
 // ─── VERSION ──────────────────────────────────────────────────────
-const APP_VERSION = '2.0.0';
+const APP_VERSION = '2.1.0';
 const APP_BUILD   = new Date().toISOString().slice(0,10);
 // Exposed on window for debugging: window.TH.version etc.
 window.TH = { version: APP_VERSION, build: APP_BUILD, markets: () => allMarkets, cache: () => _tickCache };
@@ -1226,15 +1234,15 @@ const MARKET_DIRECTORY = [
   { id:'frankfurt', name:'Frankfurt',  flag:'DE', region:'Europe',       exchange:'FSE / DAX',       tz:'Europe/Berlin',     open:{h:9,m:0},  close:{h:17,m:30}, color:'#7c6dfa' },
   { id:'paris',     name:'Paris',      flag:'FR', region:'Europe',       exchange:'Euronext / CAC',  tz:'Europe/Paris',      open:{h:9,m:0},  close:{h:17,m:30}, color:'#74b9ff' },
   { id:'zurich',    name:'Zurich',     flag:'CH', region:'Europe',       exchange:'SIX Swiss',       tz:'Europe/Zurich',     open:{h:9,m:0},  close:{h:17,m:30}, color:'#a29bfe' },
-  { id:'amsterdam', name:'Amsterdam',  flag:'NL', region:'Europe',       exchange:'Euronext AMS',    tz:'Europe/Paris',      open:{h:9,m:0},  close:{h:17,m:30}, color:'#ff9f43' },
+  { id:'amsterdam', name:'Amsterdam',  flag:'NL', region:'Europe',       exchange:'Euronext AMS',    tz:'Europe/Amsterdam',      open:{h:9,m:0},  close:{h:17,m:30}, color:'#ff9f43' },
   { id:'moscow',    name:'Moscow',     flag:'RU', region:'Europe',       exchange:'MOEX',            tz:'Europe/Moscow',     open:{h:10,m:0}, close:{h:18,m:50}, color:'#ff6b6b' },
-  { id:'stockholm', name:'Stockholm',  flag:'SE', region:'Europe',       exchange:'Nasdaq OMX',      tz:'Europe/Paris',      open:{h:9,m:0},  close:{h:17,m:30}, color:'#26de81' },
+  { id:'stockholm', name:'Stockholm',  flag:'SE', region:'Europe',       exchange:'Nasdaq OMX',      tz:'Europe/Stockholm',      open:{h:9,m:0},  close:{h:17,m:30}, color:'#26de81' },
   // Americas
   { id:'newyork',   name:'New York',   flag:'US', region:'Americas',     exchange:'NYSE / NASDAQ',   tz:'America/New_York',  open:{h:9,m:30}, close:{h:16,m:0},  color:'#0099ff' },
   { id:'chicago',   name:'Chicago',    flag:'US', region:'Americas',     exchange:'CME / CBOE',      tz:'America/Chicago',   open:{h:8,m:30}, close:{h:15,m:15}, color:'#74b9ff' },
-  { id:'toronto',   name:'Toronto',    flag:'CA', region:'Americas',     exchange:'TSX',             tz:'America/New_York',  open:{h:9,m:30}, close:{h:16,m:0},  color:'#fd9644' },
+  { id:'toronto',   name:'Toronto',    flag:'CA', region:'Americas',     exchange:'TSX',             tz:'America/Toronto',  open:{h:9,m:30}, close:{h:16,m:0},  color:'#fd9644' },
   { id:'saopaulo',  name:'São Paulo',  flag:'BR', region:'Americas',     exchange:'B3 / Bovespa',    tz:'America/Sao_Paulo', open:{h:10,m:0}, close:{h:17,m:0},  color:'#26de81' },
-  { id:'mexico',    name:'Mexico City',flag:'MX', region:'Americas',     exchange:'BMV',             tz:'America/Chicago',   open:{h:8,m:30}, close:{h:15,m:0},  color:'#e84393' },
+  { id:'mexico',    name:'Mexico City',flag:'MX', region:'Americas',     exchange:'BMV',             tz:'America/Mexico_City',   open:{h:8,m:30}, close:{h:15,m:0},  color:'#e84393' },
   // Middle East & Africa
   { id:'dubai',     name:'Dubai',      flag:'AE', region:'Middle East',  exchange:'DFM / DFSA',      tz:'Asia/Dubai',        open:{h:10,m:0}, close:{h:14,m:0},  color:'#ffd32a' },
   { id:'riyadh',    name:'Riyadh',     flag:'SA', region:'Middle East',  exchange:'Tadawul',         tz:'Asia/Riyadh',       open:{h:10,m:0}, close:{h:15,m:0},  color:'#ff9f43' },
@@ -1355,15 +1363,23 @@ function loadState() {
     // Sanitise custom markets: strip emoji flags, capitalise names
     const cleanCustom = savedCustom.map(m => ({
       ...m,
+      // ids end up in onclick handlers, so only allow simple ones
+      id: /^[A-Za-z0-9_-]{1,40}$/.test(m.id) ? m.id : 'c' + Math.random().toString(36).slice(2, 10),
       flag: (m.flag || '??').replace(/[^\x00-\x7F]/g, '').toUpperCase().slice(0, 4) || '??',
       name: m.name ? m.name.charAt(0).toUpperCase() + m.name.slice(1) : m.name,
     }));
 
     const allBase = [...DEFAULT_MARKETS.map(m => ({...m})), ...cleanCustom];
+    // Markets added from the directory are saved by id only, so look them up there.
+    // This also brings saved markets up to date if the directory changes (e.g. a time zone fix).
+    const fromDirectory = id => {
+      const d = MARKET_DIRECTORY.find(m => m.id === id);
+      return d ? { ...d, region: d.region.toLowerCase() } : null;
+    };
     if (savedOrder) {
-      // restore order, add any new defaults at end
-      allMarkets = savedOrder.map(id => allBase.find(m => m.id === id)).filter(Boolean);
-      allBase.forEach(m => { if (!allMarkets.find(x => x.id === m.id)) allMarkets.push(m); });
+      allMarkets = savedOrder.map(id => allBase.find(m => m.id === id) || fromDirectory(id)).filter(Boolean);
+      // add any new defaults at the end, unless the user had removed them
+      if (!savedOrder.length) allBase.forEach(m => { if (!allMarkets.find(x => x.id === m.id)) allMarkets.push(m); });
     } else {
       allMarkets = allBase;
     }
@@ -1473,83 +1489,195 @@ function beginTick() {
 //   call `mergeHolidays(remoteData)` on load. The lookup logic below
 //   is API-agnostic — it only cares about the schema above.
 
+// Holiday calendar coverage. When the current year passes this, the app shows a notice.
+const HOLIDAY_YEARS = { from: 2026, to: 2027 };
+
+// Sources (checked 27 Nov 2026): NYSE/ICE 2026-2028 calendar, London Stock Exchange
+// business days, Deutsche Börse Xetra trading calendar, JPX market holidays, ASX Trade
+// calendar, Euronext trading hours & holidays, TMX/TSX calendar, and the Hong Kong
+// general holidays gazette (HKEX closes on those; half days on Christmas Eve, New
+// Year's Eve and Lunar New Year's Eve when they fall on a weekday).
+// Times in `close` are the market's local time. Weekend dates are left out.
 const STATIC_HOLIDAYS = [
-  // ── United States ──────────────────────────────────────────────
-  { market:'newyork',   date:'2025-01-01', type:'holiday', note:"New Year's Day" },
-  { market:'newyork',   date:'2025-01-20', type:'holiday', note:'MLK Day' },
-  { market:'newyork',   date:'2025-02-17', type:'holiday', note:"Presidents' Day" },
-  { market:'newyork',   date:'2025-04-18', type:'holiday', note:'Good Friday' },
-  { market:'newyork',   date:'2025-05-26', type:'holiday', note:'Memorial Day' },
-  { market:'newyork',   date:'2025-06-19', type:'holiday', note:'Juneteenth' },
-  { market:'newyork',   date:'2025-07-04', type:'holiday', note:'Independence Day' },
-  { market:'newyork',   date:'2025-07-03', type:'half',    close:{h:13,m:0}, note:'Independence Day Eve' },
-  { market:'newyork',   date:'2025-09-01', type:'holiday', note:'Labor Day' },
-  { market:'newyork',   date:'2025-11-27', type:'holiday', note:'Thanksgiving' },
-  { market:'newyork',   date:'2025-11-28', type:'half',    close:{h:13,m:0}, note:'Black Friday' },
-  { market:'newyork',   date:'2025-12-24', type:'half',    close:{h:13,m:0}, note:'Christmas Eve' },
-  { market:'newyork',   date:'2025-12-25', type:'holiday', note:'Christmas Day' },
-  { market:'chicago',   date:'2025-12-25', type:'holiday', note:'Christmas Day' },
-  { market:'chicago',   date:'2025-01-01', type:'holiday', note:"New Year's Day" },
-  // ── United Kingdom ─────────────────────────────────────────────
-  { market:'london',    date:'2025-01-01', type:'holiday', note:"New Year's Day" },
-  { market:'london',    date:'2025-04-18', type:'holiday', note:'Good Friday' },
-  { market:'london',    date:'2025-04-21', type:'holiday', note:'Easter Monday' },
-  { market:'london',    date:'2025-05-05', type:'holiday', note:'Early May BH' },
-  { market:'london',    date:'2025-05-26', type:'holiday', note:'Spring BH' },
-  { market:'london',    date:'2025-08-25', type:'holiday', note:'Summer BH' },
-  { market:'london',    date:'2025-12-25', type:'holiday', note:'Christmas Day' },
-  { market:'london',    date:'2025-12-26', type:'holiday', note:'Boxing Day' },
-  // ── Germany ────────────────────────────────────────────────────
-  { market:'frankfurt', date:'2025-01-01', type:'holiday', note:"New Year's Day" },
-  { market:'frankfurt', date:'2025-04-18', type:'holiday', note:'Good Friday' },
-  { market:'frankfurt', date:'2025-04-21', type:'holiday', note:'Easter Monday' },
-  { market:'frankfurt', date:'2025-05-01', type:'holiday', note:'Labour Day' },
-  { market:'frankfurt', date:'2025-12-24', type:'half',    close:{h:14,m:0}, note:'Christmas Eve' },
-  { market:'frankfurt', date:'2025-12-25', type:'holiday', note:'Christmas Day' },
-  { market:'frankfurt', date:'2025-12-31', type:'half',    close:{h:14,m:0}, note:"New Year's Eve" },
-  // ── Japan ──────────────────────────────────────────────────────
-  { market:'tokyo',     date:'2025-01-01', type:'holiday', note:"New Year's Day" },
-  { market:'tokyo',     date:'2025-01-13', type:'holiday', note:'Coming of Age Day' },
-  { market:'tokyo',     date:'2025-02-11', type:'holiday', note:'National Foundation Day' },
-  { market:'tokyo',     date:'2025-04-29', type:'holiday', note:'Showa Day' },
-  { market:'tokyo',     date:'2025-05-03', type:'holiday', note:'Constitution Day' },
-  { market:'tokyo',     date:'2025-05-05', type:'holiday', note:"Children's Day" },
-  { market:'tokyo',     date:'2025-08-11', type:'holiday', note:'Mountain Day' },
-  { market:'tokyo',     date:'2025-09-15', type:'holiday', note:'Respect for the Aged Day' },
-  { market:'tokyo',     date:'2025-11-03', type:'holiday', note:'Culture Day' },
-  { market:'tokyo',     date:'2025-11-23', type:'holiday', note:'Labour Thanksgiving Day' },
-  { market:'tokyo',     date:'2025-12-31', type:'holiday', note:"New Year's Eve" },
-  // ── Hong Kong ──────────────────────────────────────────────────
-  { market:'hongkong',  date:'2025-01-01', type:'holiday', note:"New Year's Day" },
-  { market:'hongkong',  date:'2025-01-29', type:'holiday', note:'Lunar New Year' },
-  { market:'hongkong',  date:'2025-04-18', type:'holiday', note:'Good Friday' },
-  { market:'hongkong',  date:'2025-04-21', type:'holiday', note:'Easter Monday' },
-  { market:'hongkong',  date:'2025-05-01', type:'holiday', note:'Labour Day' },
-  { market:'hongkong',  date:'2025-07-01', type:'holiday', note:'SAR Establishment Day' },
-  { market:'hongkong',  date:'2025-10-01', type:'holiday', note:'National Day' },
-  { market:'hongkong',  date:'2025-12-25', type:'holiday', note:'Christmas Day' },
-  // ── Australia ──────────────────────────────────────────────────
-  { market:'sydney',    date:'2025-01-01', type:'holiday', note:"New Year's Day" },
-  { market:'sydney',    date:'2025-01-27', type:'holiday', note:'Australia Day' },
-  { market:'sydney',    date:'2025-04-18', type:'holiday', note:'Good Friday' },
-  { market:'sydney',    date:'2025-04-21', type:'holiday', note:'Easter Monday' },
-  { market:'sydney',    date:'2025-04-25', type:'holiday', note:'ANZAC Day' },
-  { market:'sydney',    date:'2025-12-25', type:'holiday', note:'Christmas Day' },
-  { market:'sydney',    date:'2025-12-26', type:'holiday', note:'Boxing Day' },
-  // ── France ─────────────────────────────────────────────────────
-  { market:'paris',     date:'2025-01-01', type:'holiday', note:"New Year's Day" },
-  { market:'paris',     date:'2025-04-18', type:'holiday', note:'Good Friday' },
-  { market:'paris',     date:'2025-05-01', type:'holiday', note:'Labour Day' },
-  { market:'paris',     date:'2025-12-25', type:'holiday', note:'Christmas Day' },
-  // ── Canada ─────────────────────────────────────────────────────
-  { market:'toronto',   date:'2025-02-17', type:'holiday', note:'Family Day' },
-  { market:'toronto',   date:'2025-04-18', type:'holiday', note:'Good Friday' },
-  { market:'toronto',   date:'2025-05-19', type:'holiday', note:'Victoria Day' },
-  { market:'toronto',   date:'2025-07-01', type:'holiday', note:'Canada Day' },
-  { market:'toronto',   date:'2025-09-01', type:'holiday', note:'Labour Day' },
-  { market:'toronto',   date:'2025-10-13', type:'holiday', note:'Thanksgiving' },
-  { market:'toronto',   date:'2025-12-25', type:'holiday', note:'Christmas Day' },
-  { market:'toronto',   date:'2025-12-26', type:'holiday', note:'Boxing Day' },
+  // ── United States · NYSE ───────────────────────────────────────
+  { market:'newyork', date:'2026-01-01', type:'holiday', note:"New Year's Day" },
+  { market:'newyork', date:'2026-01-19', type:'holiday', note:'Martin Luther King Jr. Day' },
+  { market:'newyork', date:'2026-02-16', type:'holiday', note:"Washington's Birthday" },
+  { market:'newyork', date:'2026-04-03', type:'holiday', note:'Good Friday' },
+  { market:'newyork', date:'2026-05-25', type:'holiday', note:'Memorial Day' },
+  { market:'newyork', date:'2026-06-19', type:'holiday', note:'Juneteenth' },
+  { market:'newyork', date:'2026-07-03', type:'holiday', note:'Independence Day (observed)' },
+  { market:'newyork', date:'2026-09-07', type:'holiday', note:'Labor Day' },
+  { market:'newyork', date:'2026-11-26', type:'holiday', note:'Thanksgiving Day' },
+  { market:'newyork', date:'2026-11-27', type:'half', close:{h:13,m:0}, note:'Day after Thanksgiving' },
+  { market:'newyork', date:'2026-12-24', type:'half', close:{h:13,m:0}, note:'Christmas Eve' },
+  { market:'newyork', date:'2026-12-25', type:'holiday', note:'Christmas Day' },
+  { market:'newyork', date:'2027-01-01', type:'holiday', note:"New Year's Day" },
+  { market:'newyork', date:'2027-01-18', type:'holiday', note:'Martin Luther King Jr. Day' },
+  { market:'newyork', date:'2027-02-15', type:'holiday', note:"Washington's Birthday" },
+  { market:'newyork', date:'2027-03-26', type:'holiday', note:'Good Friday' },
+  { market:'newyork', date:'2027-05-31', type:'holiday', note:'Memorial Day' },
+  { market:'newyork', date:'2027-06-18', type:'holiday', note:'Juneteenth (observed)' },
+  { market:'newyork', date:'2027-07-05', type:'holiday', note:'Independence Day (observed)' },
+  { market:'newyork', date:'2027-09-06', type:'holiday', note:'Labor Day' },
+  { market:'newyork', date:'2027-11-25', type:'holiday', note:'Thanksgiving Day' },
+  { market:'newyork', date:'2027-11-26', type:'half', close:{h:13,m:0}, note:'Day after Thanksgiving' },
+  { market:'newyork', date:'2027-12-24', type:'holiday', note:'Christmas Day (observed)' },
+  // ── United States · Chicago (core closures only) ──────────────
+  { market:'chicago', date:'2026-01-01', type:'holiday', note:"New Year's Day" },
+  { market:'chicago', date:'2026-12-25', type:'holiday', note:'Christmas Day' },
+  { market:'chicago', date:'2027-01-01', type:'holiday', note:"New Year's Day" },
+  // ── United Kingdom · LSE ───────────────────────────────────────
+  { market:'london', date:'2026-01-01', type:'holiday', note:"New Year's Day" },
+  { market:'london', date:'2026-04-03', type:'holiday', note:'Good Friday' },
+  { market:'london', date:'2026-04-06', type:'holiday', note:'Easter Monday' },
+  { market:'london', date:'2026-05-04', type:'holiday', note:'Early May Bank Holiday' },
+  { market:'london', date:'2026-05-25', type:'holiday', note:'Spring Bank Holiday' },
+  { market:'london', date:'2026-08-31', type:'holiday', note:'Summer Bank Holiday' },
+  { market:'london', date:'2026-12-24', type:'half', close:{h:12,m:30}, note:'Christmas Eve' },
+  { market:'london', date:'2026-12-25', type:'holiday', note:'Christmas Day' },
+  { market:'london', date:'2026-12-28', type:'holiday', note:'Boxing Day (substitute)' },
+  { market:'london', date:'2026-12-31', type:'half', close:{h:12,m:30}, note:"New Year's Eve" },
+  { market:'london', date:'2027-01-01', type:'holiday', note:"New Year's Day" },
+  { market:'london', date:'2027-03-26', type:'holiday', note:'Good Friday' },
+  { market:'london', date:'2027-03-29', type:'holiday', note:'Easter Monday' },
+  { market:'london', date:'2027-05-03', type:'holiday', note:'Early May Bank Holiday' },
+  { market:'london', date:'2027-05-31', type:'holiday', note:'Spring Bank Holiday' },
+  { market:'london', date:'2027-08-30', type:'holiday', note:'Summer Bank Holiday' },
+  { market:'london', date:'2027-12-24', type:'half', close:{h:12,m:30}, note:'Christmas Eve' },
+  { market:'london', date:'2027-12-27', type:'holiday', note:'Christmas Day (substitute)' },
+  { market:'london', date:'2027-12-28', type:'holiday', note:'Boxing Day (substitute)' },
+  { market:'london', date:'2027-12-31', type:'half', close:{h:12,m:30}, note:"New Year's Eve" },
+  // ── Germany · Xetra (closed, not half days, on 24 and 31 Dec) ─
+  { market:'frankfurt', date:'2026-01-01', type:'holiday', note:"New Year's Day" },
+  { market:'frankfurt', date:'2026-04-03', type:'holiday', note:'Good Friday' },
+  { market:'frankfurt', date:'2026-04-06', type:'holiday', note:'Easter Monday' },
+  { market:'frankfurt', date:'2026-05-01', type:'holiday', note:'Labour Day' },
+  { market:'frankfurt', date:'2026-12-24', type:'holiday', note:'Christmas Eve' },
+  { market:'frankfurt', date:'2026-12-25', type:'holiday', note:'Christmas Day' },
+  { market:'frankfurt', date:'2026-12-31', type:'holiday', note:"New Year's Eve" },
+  { market:'frankfurt', date:'2027-01-01', type:'holiday', note:"New Year's Day" },
+  { market:'frankfurt', date:'2027-03-26', type:'holiday', note:'Good Friday' },
+  { market:'frankfurt', date:'2027-03-29', type:'holiday', note:'Easter Monday' },
+  { market:'frankfurt', date:'2027-12-24', type:'holiday', note:'Christmas Eve' },
+  { market:'frankfurt', date:'2027-12-31', type:'holiday', note:"New Year's Eve" },
+  // ── Japan · JPX ────────────────────────────────────────────────
+  { market:'tokyo', date:'2026-01-01', type:'holiday', note:"New Year's Day" },
+  { market:'tokyo', date:'2026-01-02', type:'holiday', note:'Market holiday' },
+  { market:'tokyo', date:'2026-01-12', type:'holiday', note:'Coming of Age Day' },
+  { market:'tokyo', date:'2026-02-11', type:'holiday', note:'National Foundation Day' },
+  { market:'tokyo', date:'2026-02-23', type:'holiday', note:"Emperor's Birthday" },
+  { market:'tokyo', date:'2026-03-20', type:'holiday', note:'Vernal Equinox Day' },
+  { market:'tokyo', date:'2026-04-29', type:'holiday', note:'Showa Day' },
+  { market:'tokyo', date:'2026-05-04', type:'holiday', note:'Greenery Day' },
+  { market:'tokyo', date:'2026-05-05', type:'holiday', note:"Children's Day" },
+  { market:'tokyo', date:'2026-05-06', type:'holiday', note:'Constitution Day (observed)' },
+  { market:'tokyo', date:'2026-07-20', type:'holiday', note:'Marine Day' },
+  { market:'tokyo', date:'2026-08-11', type:'holiday', note:'Mountain Day' },
+  { market:'tokyo', date:'2026-09-21', type:'holiday', note:'Respect for the Aged Day' },
+  { market:'tokyo', date:'2026-09-22', type:'holiday', note:'National holiday' },
+  { market:'tokyo', date:'2026-09-23', type:'holiday', note:'Autumnal Equinox Day' },
+  { market:'tokyo', date:'2026-10-12', type:'holiday', note:'Sports Day' },
+  { market:'tokyo', date:'2026-11-03', type:'holiday', note:'Culture Day' },
+  { market:'tokyo', date:'2026-11-23', type:'holiday', note:'Labour Thanksgiving Day' },
+  { market:'tokyo', date:'2026-12-31', type:'holiday', note:'Market holiday' },
+  { market:'tokyo', date:'2027-01-01', type:'holiday', note:"New Year's Day" },
+  { market:'tokyo', date:'2027-01-11', type:'holiday', note:'Coming of Age Day' },
+  { market:'tokyo', date:'2027-02-11', type:'holiday', note:'National Foundation Day' },
+  { market:'tokyo', date:'2027-02-23', type:'holiday', note:"Emperor's Birthday" },
+  { market:'tokyo', date:'2027-03-22', type:'holiday', note:'Vernal Equinox Day (observed)' },
+  { market:'tokyo', date:'2027-04-29', type:'holiday', note:'Showa Day' },
+  { market:'tokyo', date:'2027-05-03', type:'holiday', note:'Constitution Memorial Day' },
+  { market:'tokyo', date:'2027-05-04', type:'holiday', note:'Greenery Day' },
+  { market:'tokyo', date:'2027-05-05', type:'holiday', note:"Children's Day" },
+  { market:'tokyo', date:'2027-07-19', type:'holiday', note:'Marine Day' },
+  { market:'tokyo', date:'2027-08-11', type:'holiday', note:'Mountain Day' },
+  { market:'tokyo', date:'2027-09-20', type:'holiday', note:'Respect for the Aged Day' },
+  { market:'tokyo', date:'2027-09-23', type:'holiday', note:'Autumnal Equinox Day' },
+  { market:'tokyo', date:'2027-10-11', type:'holiday', note:'Sports Day' },
+  { market:'tokyo', date:'2027-11-03', type:'holiday', note:'Culture Day' },
+  { market:'tokyo', date:'2027-11-23', type:'holiday', note:'Labour Thanksgiving Day' },
+  { market:'tokyo', date:'2027-12-31', type:'holiday', note:'Market holiday' },
+  // ── Hong Kong · HKEX (2026: remaining dates) ──────────────────
+  { market:'hongkong', date:'2026-10-01', type:'holiday', note:'National Day' },
+  { market:'hongkong', date:'2026-10-19', type:'holiday', note:'Day after Chung Yeung Festival' },
+  { market:'hongkong', date:'2026-12-24', type:'half', close:{h:12,m:0}, note:'Christmas Eve' },
+  { market:'hongkong', date:'2026-12-25', type:'holiday', note:'Christmas Day' },
+  { market:'hongkong', date:'2026-12-31', type:'half', close:{h:12,m:0}, note:"New Year's Eve" },
+  { market:'hongkong', date:'2027-01-01', type:'holiday', note:"New Year's Day" },
+  { market:'hongkong', date:'2027-02-05', type:'half', close:{h:12,m:0}, note:"Lunar New Year's Eve" },
+  { market:'hongkong', date:'2027-02-08', type:'holiday', note:'Lunar New Year' },
+  { market:'hongkong', date:'2027-02-09', type:'holiday', note:'Lunar New Year' },
+  { market:'hongkong', date:'2027-03-26', type:'holiday', note:'Good Friday' },
+  { market:'hongkong', date:'2027-03-29', type:'holiday', note:'Easter Monday' },
+  { market:'hongkong', date:'2027-04-05', type:'holiday', note:'Ching Ming Festival' },
+  { market:'hongkong', date:'2027-05-13', type:'holiday', note:"Buddha's Birthday" },
+  { market:'hongkong', date:'2027-06-09', type:'holiday', note:'Tuen Ng Festival' },
+  { market:'hongkong', date:'2027-07-01', type:'holiday', note:'HKSAR Establishment Day' },
+  { market:'hongkong', date:'2027-09-16', type:'holiday', note:'Day after Mid-Autumn Festival' },
+  { market:'hongkong', date:'2027-10-01', type:'holiday', note:'National Day' },
+  { market:'hongkong', date:'2027-10-08', type:'holiday', note:'Chung Yeung Festival' },
+  { market:'hongkong', date:'2027-12-24', type:'half', close:{h:12,m:0}, note:'Christmas Eve' },
+  { market:'hongkong', date:'2027-12-27', type:'holiday', note:'First weekday after Christmas' },
+  { market:'hongkong', date:'2027-12-31', type:'half', close:{h:12,m:0}, note:"New Year's Eve" },
+  // ── Australia · ASX (early closes at 14:10) ────────────────────
+  { market:'sydney', date:'2026-01-01', type:'holiday', note:"New Year's Day" },
+  { market:'sydney', date:'2026-01-26', type:'holiday', note:'Australia Day' },
+  { market:'sydney', date:'2026-04-03', type:'holiday', note:'Good Friday' },
+  { market:'sydney', date:'2026-04-06', type:'holiday', note:'Easter Monday' },
+  { market:'sydney', date:'2026-06-08', type:'holiday', note:"King's Birthday" },
+  { market:'sydney', date:'2026-12-24', type:'half', close:{h:14,m:10}, note:'Christmas Eve' },
+  { market:'sydney', date:'2026-12-25', type:'holiday', note:'Christmas Day' },
+  { market:'sydney', date:'2026-12-28', type:'holiday', note:'Boxing Day' },
+  { market:'sydney', date:'2026-12-31', type:'half', close:{h:14,m:10}, note:"New Year's Eve" },
+  { market:'sydney', date:'2027-01-01', type:'holiday', note:"New Year's Day" },
+  { market:'sydney', date:'2027-01-26', type:'holiday', note:'Australia Day' },
+  { market:'sydney', date:'2027-03-26', type:'holiday', note:'Good Friday' },
+  { market:'sydney', date:'2027-03-29', type:'holiday', note:'Easter Monday' },
+  { market:'sydney', date:'2027-06-14', type:'holiday', note:"King's Birthday" },
+  { market:'sydney', date:'2027-12-24', type:'half', close:{h:14,m:10}, note:'Christmas Eve' },
+  { market:'sydney', date:'2027-12-27', type:'holiday', note:'Christmas Day (substitute)' },
+  { market:'sydney', date:'2027-12-28', type:'holiday', note:'Boxing Day (substitute)' },
+  { market:'sydney', date:'2027-12-31', type:'half', close:{h:14,m:10}, note:"New Year's Eve" },
+  // ── Euronext Paris and Amsterdam ───────────────────────────────
+  // Half-day close times aren't published yet; 14:05 CET is Euronext's usual half-day close.
+  ...['paris', 'amsterdam'].flatMap(market => [
+    { market, date:'2026-01-01', type:'holiday', note:"New Year's Day" },
+    { market, date:'2026-04-03', type:'holiday', note:'Good Friday' },
+    { market, date:'2026-04-06', type:'holiday', note:'Easter Monday' },
+    { market, date:'2026-05-01', type:'holiday', note:'Labour Day' },
+    { market, date:'2026-12-24', type:'half', close:{h:14,m:5}, note:'Christmas Eve' },
+    { market, date:'2026-12-25', type:'holiday', note:'Christmas Day' },
+    { market, date:'2026-12-31', type:'half', close:{h:14,m:5}, note:"New Year's Eve" },
+    { market, date:'2027-01-01', type:'holiday', note:"New Year's Day" },
+    { market, date:'2027-03-26', type:'holiday', note:'Good Friday' },
+    { market, date:'2027-03-29', type:'holiday', note:'Easter Monday' },
+    { market, date:'2027-12-24', type:'half', close:{h:14,m:5}, note:'Christmas Eve' },
+    { market, date:'2027-12-31', type:'half', close:{h:14,m:5}, note:"New Year's Eve" },
+  ]),
+  // ── Canada · TSX ───────────────────────────────────────────────
+  { market:'toronto', date:'2026-01-01', type:'holiday', note:"New Year's Day" },
+  { market:'toronto', date:'2026-02-16', type:'holiday', note:'Family Day' },
+  { market:'toronto', date:'2026-04-03', type:'holiday', note:'Good Friday' },
+  { market:'toronto', date:'2026-05-18', type:'holiday', note:'Victoria Day' },
+  { market:'toronto', date:'2026-07-01', type:'holiday', note:'Canada Day' },
+  { market:'toronto', date:'2026-08-03', type:'holiday', note:'Civic Holiday' },
+  { market:'toronto', date:'2026-09-07', type:'holiday', note:'Labour Day' },
+  { market:'toronto', date:'2026-10-12', type:'holiday', note:'Thanksgiving Day' },
+  { market:'toronto', date:'2026-12-24', type:'half', close:{h:13,m:0}, note:'Christmas Eve' },
+  { market:'toronto', date:'2026-12-25', type:'holiday', note:'Christmas Day' },
+  { market:'toronto', date:'2026-12-28', type:'holiday', note:'Boxing Day (in lieu)' },
+  { market:'toronto', date:'2027-01-01', type:'holiday', note:"New Year's Day" },
+  { market:'toronto', date:'2027-02-15', type:'holiday', note:'Family Day' },
+  { market:'toronto', date:'2027-03-26', type:'holiday', note:'Good Friday' },
+  { market:'toronto', date:'2027-05-24', type:'holiday', note:'Victoria Day' },
+  { market:'toronto', date:'2027-07-01', type:'holiday', note:'Canada Day' },
+  { market:'toronto', date:'2027-08-02', type:'holiday', note:'Civic Holiday' },
+  { market:'toronto', date:'2027-09-06', type:'holiday', note:'Labour Day' },
+  { market:'toronto', date:'2027-10-11', type:'holiday', note:'Thanksgiving Day' },
+  { market:'toronto', date:'2027-12-24', type:'half', close:{h:13,m:0}, note:'Christmas Eve' },
+  { market:'toronto', date:'2027-12-27', type:'holiday', note:'Christmas Day (in lieu)' },
+  { market:'toronto', date:'2027-12-28', type:'holiday', note:'Boxing Day (in lieu)' },
 ];
 
 // Merged holiday map: keyed as 'marketId|YYYY-MM-DD'
@@ -1573,81 +1701,130 @@ function mergeHolidays(entries) {
 // Kick off API fetch (silently fails if stub returns nothing)
 fetchHolidaysFromAPI().then(mergeHolidays).catch(() => {});
 
-// Look up today's holiday override for a given market.
-// Returns the entry or null. Uses the market's LOCAL date (DST-aware).
-function getTodayHoliday(market) {
-  const localDate = fmtDate(market.tz).format(_tickNow || new Date()); // 'YYYY-MM-DD'
-  return HOLIDAY_MAP[`${market.id}|${localDate}`]
-      || HOLIDAY_MAP[`*|${localDate}`]    // wildcard for global closures
-      || null;
+// ─── TIME ZONE HELPERS ────────────────────────────────────────────
+// One formatter per time zone, reused every tick.
+const _fmtParts = {};
+const DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const DAY_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+
+/** Wall-clock date and time in a time zone, including the local weekday */
+function localParts(tz, date) {
+  const f = _fmtParts[tz] || (_fmtParts[tz] = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz, hourCycle: 'h23', weekday: 'short',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+  }));
+  const p = {};
+  f.formatToParts(date).forEach(x => { p[x.type] = x.value; });
+  return {
+    y: +p.year, mo: +p.month, d: +p.day,
+    h: +p.hour % 24, mi: +p.minute, s: +p.second,
+    dow: DOW.indexOf(p.weekday),
+    ymd: `${p.year}-${p.month}-${p.day}`,
+  };
 }
 
-function _computeMarketTimes(market, now) {
-  const localStr = fmtTime(market.tz).format(now);
-  const parts = localStr.match(/(\d+):(\d+):(\d+)/);
-  let h = +parts[1] % 24, m = +parts[2], s = +parts[3];
-
-  const loc = h * 60 + m;
-
-  // ── Holiday override ────────────────────────────────────────────
-  // Check HOLIDAY_MAP for today's date in the market's local timezone.
-  // This runs before status calculation so any override cleanly gates the logic.
-  const holiday = getTodayHoliday(market);
-  if (holiday?.type === 'holiday' || holiday?.type === 'closed') {
-    const displayTime = localStr.match(/(\d+:\d+:\d+)/)?.[1].replace(/^24/,'00') || '--:--:--';
-    const tzName = fmtTZName(market.tz).format(now).split(', ').pop();
-    return {
-      status: 'holiday',
-      holiday,
-      displayTime, tzName,
-      countdownStr: '--:--:--',
-      countdownLabel: holiday.note || 'Holiday',
-      countdownPhrase: holiday.note || 'Market closed today',
-      progress: 0
-    };
+/** The exact UTC instant (ms) of a wall-clock time in a time zone. DST-aware. */
+function zonedToUtc(tz, y, mo, d, h, mi) {
+  const want = Date.UTC(y, mo - 1, d, h, mi);
+  let guess = want;
+  for (let i = 0; i < 3; i++) {
+    const p = localParts(tz, new Date(guess));
+    const diff = want - Date.UTC(p.y, p.mo - 1, p.d, p.h, p.mi);
+    if (!diff) break;
+    guess += diff;
   }
+  return guess;
+}
 
-  // For half-days, honour the override close time
-  const effectiveClose = (holiday?.type === 'half' && holiday.close)
-    ? holiday.close
-    : market.close;
-  const holidayNote = holiday?.type === 'half' ? holiday.note : null;
+// ─── TRADING DAYS ─────────────────────────────────────────────────
+// Most exchanges close Saturday and Sunday. Tadawul and EGX trade Sunday to
+// Thursday. Tel Aviv moved to Monday to Friday in January 2026.
+const WEEKENDS = { riyadh: [5, 6], cairo: [5, 6] };
+function weekendFor(market) { return market.weekend || WEEKENDS[market.id] || [0, 6]; }
+
+function holidayOn(market, ymd) {
+  return HOLIDAY_MAP[`${market.id}|${ymd}`] || HOLIDAY_MAP[`*|${ymd}`] || null;
+}
+function isFullClosure(h) { return h?.type === 'holiday' || h?.type === 'closed'; }
+function isTradingDay(market, ymd, dow) {
+  return !weekendFor(market).includes(dow) && !isFullClosure(holidayOn(market, ymd));
+}
+
+/** The next session open after `now`, skipping weekends and holidays */
+function nextOpen(market, now) {
+  const p = localParts(market.tz, now);
+  for (let k = 0; k <= 21; k++) {
+    const day = new Date(Date.UTC(p.y, p.mo - 1, p.d + k));
+    const ymd = day.toISOString().slice(0, 10);
+    const dow = day.getUTCDay();
+    if (!isTradingDay(market, ymd, dow)) continue;
+    const ms = zonedToUtc(market.tz, day.getUTCFullYear(), day.getUTCMonth() + 1, day.getUTCDate(),
+                          market.open.h, market.open.m);
+    if (ms > now.getTime()) return { ms, days: k, dow };
+  }
+  return null;
+}
+
+// Kept for anything that still asks for today's holiday
+function getTodayHoliday(market) {
+  return holidayOn(market, localParts(market.tz, _tickNow || new Date()).ymd);
+}
+
+const hm = t => `${pad(t.h)}:${pad(t.m)}`;
+
+function _computeMarketTimes(market, now) {
+  const p = localParts(market.tz, now);
+  const loc = p.h * 60 + p.mi, s = p.s;
+  const displayTime = `${pad(p.h)}:${pad(p.mi)}:${pad(p.s)}`;
+  const tzName = fmtTZName(market.tz).format(now).split(', ').pop();
+
+  const holiday   = holidayOn(market, p.ymd);
+  const isWeekend = weekendFor(market).includes(p.dow);
+  const closedAllDay = isWeekend || isFullClosure(holiday);
+  const half = !closedAllDay && holiday?.type === 'half' ? holiday : null;
+  const effectiveClose = half?.close || market.close;
 
   const openM = market.open.h * 60 + market.open.m;
   const clsM  = effectiveClose.h * 60 + effectiveClose.m;
   const preM  = openM - 60;
 
   let status = 'closed';
-  if (loc >= openM && loc < clsM) status = 'open';
+  if (isWeekend) status = 'weekend';
+  else if (closedAllDay) status = 'holiday';
+  else if (loc >= openM && loc < clsM) status = 'open';
   else if (loc >= preM && loc < openM) status = 'pre';
 
   let secs, label, phrase;
   if (status === 'open') {
-    secs = (clsM - loc)*60 - s;
-    label = holidayNote ? `Early close — ${holidayNote}` : 'Closes in';
-    phrase = holidayNote ? `Early close: ${pad(effectiveClose.h)}:${pad(effectiveClose.m)}` : `${market.name} closes in`;
-  } else if (status === 'pre') {
-    secs = (openM - loc)*60 - s; label = 'Opens in'; phrase = 'Pre-market ends in';
+    secs   = (clsM - loc) * 60 - s;
+    label  = half ? `Early close · ${half.note}` : 'Closes in';
+    phrase = half ? `Closes early at ${hm(effectiveClose)}` : `${market.name} closes at ${hm(effectiveClose)}`;
   } else {
-    secs = (openM - loc)*60 - s;
-    if (secs < 0) secs += 86400;
-    label = 'Opens in'; phrase = `${market.name} opens in`;
+    // Count down to the next real session: tomorrow, Monday, or after a holiday
+    const nx = nextOpen(market, now);
+    secs  = nx ? Math.max(0, Math.round((nx.ms - now.getTime()) / 1000)) : 0;
+    label = 'Opens in';
+    const when = !nx ? '' : nx.days === 0 ? 'today' : nx.days === 1 ? 'tomorrow' : DAY_NAMES[nx.dow];
+    phrase = status === 'pre'
+      ? `Pre-market · opens at ${hm(market.open)}`
+      : nx ? `Opens ${when} at ${hm(market.open)}` : 'Next session not known';
   }
 
-  const cdH = Math.floor(secs/3600), cdM = Math.floor((secs%3600)/60), cdS = secs%60;
+  const cdH = Math.floor(secs / 3600), cdM = Math.floor((secs % 3600) / 60), cdS = secs % 60;
   let progress = 0;
-  if (status === 'open') progress = (loc - openM)/(clsM - openM);
-  else if (status === 'pre') progress = (loc - preM)/60;
-
-  const displayTime = localStr.match(/(\d+:\d+:\d+)/)?.[1].replace(/^24/,'00') || '--:--:--';
-  const tzName = fmtTZName(market.tz).format(now).split(', ').pop();
+  if (status === 'open') progress = (loc - openM) / (clsM - openM);
+  else if (status === 'pre') progress = (loc - preM) / 60;
 
   return {
-    status, holiday: holiday || null,
+    status, holiday: holiday || null, half,
     displayTime, tzName,
-    countdownStr: `${pad(cdH)}:${pad(cdM)}:${pad(cdS)}`,
+    // Over a day away: "2d 09:00:00" rather than "57:00:00"
+    countdownStr: cdH >= 24
+      ? `${Math.floor(cdH / 24)}d ${pad(cdH % 24)}:${pad(cdM)}:${pad(cdS)}`
+      : `${pad(cdH)}:${pad(cdM)}:${pad(cdS)}`,
     countdownLabel: label, countdownPhrase: phrase,
-    progress: Math.min(1, Math.max(0, progress))
+    progress: Math.min(1, Math.max(0, progress)),
   };
 }
 
@@ -1658,20 +1835,30 @@ function getMarketTimes(market) {
 }
 
 // ─── RENDER ───────────────────────────────────────────────────────
-function renderCard(m, t) {
+/** Escape text (custom market names, exchanges) before it goes into HTML */
+function esc(v) {
+  return String(v ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+}
+
+function renderCard(market, raw) {
+  // Everything that can carry a user-typed name is escaped once, here
+  const m = { ...market, name: esc(market.name), exchange: esc(market.exchange), flag: esc(market.flag), id: esc(market.id) };
+  const t = { ...raw, countdownPhrase: esc(raw.countdownPhrase), countdownLabel: esc(raw.countdownLabel),
+              holiday: raw.holiday && { ...raw.holiday, note: esc(raw.holiday.note) } };
   const isOpen    = t.status === 'open';
   const isPre     = t.status === 'pre';
   const isHoliday = t.status === 'holiday';
+  const isWeekend = t.status === 'weekend';
   const sCls    = isOpen ? 'is-open' : isPre ? 'is-pre' : isHoliday ? 'is-holiday' : 'is-closed';
   const bCls    = isOpen ? 'badge-open' : isPre ? 'badge-pre' : isHoliday ? 'badge-holiday' : 'badge-closed';
-  const bLbl    = isOpen ? 'OPEN' : isPre ? 'PRE-MARKET' : isHoliday ? 'HOLIDAY' : 'CLOSED';
+  const bLbl    = isOpen ? 'OPEN' : isPre ? 'PRE-MARKET' : isHoliday ? 'HOLIDAY' : isWeekend ? 'WEEKEND' : 'CLOSED';
   const tCls    = isOpen ? 'timer-open' : isPre ? 'timer-pre' : 'timer-closed';
   const lc      = m.color || '#00e5a0';
   const openVar = isOpen ? `--open:${lc};` : '';
 
   const countdownDetail = isHoliday
-    ? (t.holiday?.note || 'Market holiday today')
-    : `${t.countdownLabel} ${t.countdownStr}`;
+    ? `${t.holiday?.note || 'Market holiday'}. ${t.countdownPhrase}`
+    : `${t.countdownLabel} ${t.countdownStr}. ${t.countdownPhrase}`;
   const cardAriaLabel = `${m.name}, ${m.exchange}, ${flagName(m.flag)}, ${bLbl}. ${countdownDetail}.`;
   return `<div class="market-card ${sCls}" id="card-${m.id}" data-id="${m.id}"
     role="listitem" tabindex="0" draggable="true"
@@ -1680,7 +1867,7 @@ function renderCard(m, t) {
 
     <div class="live-banner" aria-hidden="true">
       <div class="live-dot-wrap"><div class="live-dot"></div></div>
-      LIVE SESSION
+      Trading now
     </div>
     <div class="card-top">
       <div>
@@ -1688,7 +1875,7 @@ function renderCard(m, t) {
         <div class="market-name">${m.name}</div>
         <div class="market-exchange">${m.exchange}</div>
       </div>
-      <span class="status-badge ${bCls}">${bLbl}</span>
+      ${isOpen ? '' : `<span class="status-badge ${bCls}">${bLbl}</span>`}
     </div>
     <div class="card-local-time" id="time-${m.id}" aria-label="Local time ${t.displayTime} ${t.tzName}">${t.displayTime}</div>
     <div class="card-tz" aria-hidden="true">${t.tzName}</div>
@@ -1704,7 +1891,7 @@ function renderCard(m, t) {
       ${isHoliday
         ? `<span class="holiday-note">⊘ ${t.holiday?.note || 'Market holiday'}</span>`
         : `<span>Open ${pad(m.open.h)}:${pad(m.open.m)}</span>
-      <span>${t.holiday?.type === 'half' ? '½ ' : ''}Close ${pad((t.holiday?.close || m.close).h)}:${pad((t.holiday?.close || m.close).m)}</span>`
+      <span>${t.half ? '½ day · ' : ''}Close ${pad((t.half?.close || m.close).h)}:${pad((t.half?.close || m.close).m)}</span>`
       }
     </div>
     <div class="card-actions">
@@ -1718,7 +1905,7 @@ function renderCard(m, t) {
 // In edit mode we skip sorting so drag order is stable.
 // Search query filters by name, exchange, or country code.
 function getSortedMarkets() {
-  const rank = { open: 0, pre: 1, closed: 2, holiday: 2 };
+  const rank = { open: 0, pre: 1, closed: 2, holiday: 2, weekend: 2 };
   return [...allMarkets].sort((a, b) => {
     // getMarketTimesNow reads from tick cache — zero extra Intl calls
     const ra = rank[getMarketTimesNow(a).status];
@@ -1872,31 +2059,13 @@ function update() {
 // Convert a market's local open/close hours into UTC fractional hours for today,
 // using Intl to account for DST automatically.
 function marketToUTC(tz, localH, localM) {
-  // Build a Date that represents today's date at localH:localM in the given timezone.
-  // Strategy: find today's date string in that timezone, then construct the UTC ms.
+  // Today's date in that market, at its local open or close, as UTC hours from
+  // midnight UTC today. zonedToUtc() handles DST and the date line correctly.
   const now = new Date();
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: tz, year:'numeric', month:'2-digit', day:'2-digit'
-  }).format(now).split('-'); // 'YYYY-MM-DD'
-  const y = +parts[0], mo = +parts[1]-1, d = +parts[2];
-
-  // Create a date string and parse it as if it were in the target timezone
-  // by formatting UTC midnight of that local date and computing the offset.
-  const localNoon = new Date(Date.UTC(y, mo, d, localH, localM, 0));
-  // Format that UTC timestamp in the target timezone to see the local time it maps to
-  const check = new Intl.DateTimeFormat('en-US', {
-    timeZone: tz, hour:'2-digit', minute:'2-digit', hour12: false
-  }).format(localNoon);
-  const [ch, cm] = check.split(':').map(Number);
-  // Compute the offset: how far off is our guess from desired local time?
-  const diffMin = (localH * 60 + localM) - (ch * 60 + cm);
-  // Adjust UTC timestamp by the difference
-  const utcMs = localNoon.getTime() + diffMin * 60000;
-  // Return as UTC fractional hours from midnight UTC today
-  const utcMidnight = Date.UTC(
-    now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()
-  );
-  return (utcMs - utcMidnight) / 3600000;
+  const p = localParts(tz, now);
+  const ms = zonedToUtc(tz, p.y, p.mo, p.d, localH, localM);
+  const utcMidnight = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  return (ms - utcMidnight) / 3600000;
 }
 
 function buildTimeline() {
@@ -1924,32 +2093,42 @@ function buildTimeline() {
     return { name: a.name, utcO, utcC, color: a.color };
   });
 
-  const rows = [[],[],[]];
+  const ROWS = 4;                       // the four Asian sessions overlap, so four rows
+  const rows = Array.from({ length: ROWS }, () => []);
+  // Pick the first row where this session fits. A session that wraps past
+  // midnight UTC needs room for both of its pieces.
   function rowFor(o, c) {
     const o24 = ((o % 24) + 24) % 24;
     const c24 = o24 + (c - o);
-    for (let r = 0; r < 3; r++) {
-      if (rows[r].every(([a,b]) => c24 <= a || o24 >= b)) {
-        rows[r].push([o24, c24]);
-        return r;
-      }
+    const pieces = c24 <= 24 ? [[o24, c24]] : [[o24, 24], [0, c24 - 24]];
+    for (let r = 0; r < ROWS; r++) {
+      const free = pieces.every(([po, pc]) => rows[r].every(([a, b]) => pc <= a || po >= b));
+      if (free) { rows[r].push(...pieces); return r; }
     }
     return 0;
   }
 
-  const tHeight = 40; // matches CSS timeline height padding
-  const rh = 40 / 3;
+  const rh = ((tl.clientHeight || 64) - 8) / ROWS;   // fits whatever height the CSS gives the timeline
 
-  segs.forEach(s => {
-    let o = ((s.utcO % 24) + 24) % 24;
-    let c = o + (s.utcC - s.utcO);
-    if (c > 24) c = 24; // clip at day boundary for display
-    const row = rowFor(s.utcO, s.utcC);
+  const addSeg = (label, o, c, color, row, name = label) => {
     const el = document.createElement('div');
     el.className = 'timeline-segment';
-    el.style.cssText = `left:${o/24*100}%;width:${(c-o)/24*100}%;background:${s.color};top:${row*rh+4}px;bottom:${(2-row)*rh+4}px;opacity:0.75;`;
-    el.textContent = s.name;
+    el.style.cssText = `left:${o/24*100}%;width:${(c-o)/24*100}%;background:${color};top:${row*rh+4}px;height:${rh-2}px;line-height:${rh-2}px;opacity:0.75;`;
+    el.textContent = label;
+    el.title = `${name} ${pad(Math.floor(o))}:${pad(Math.round((o%1)*60))}–${pad(Math.floor(c%24))}:${pad(Math.round((c%1)*60))} UTC`;
     tl.appendChild(el);
+  };
+  segs.forEach(s => {
+    const o = ((s.utcO % 24) + 24) % 24;
+    const c = o + (s.utcC - s.utcO);
+    const row = rowFor(s.utcO, s.utcC);
+    if (c <= 24) addSeg(s.name, o, c, s.color, row);
+    else {
+      // Wraps past midnight UTC: two pieces, labelled on the bigger one only
+      const firstBigger = (24 - o) >= (c - 24);
+      addSeg(firstBigger ? s.name : '', o, 24, s.color, row, s.name);
+      addSeg(firstBigger ? '' : s.name, 0, c - 24, s.color, row, s.name);
+    }
   });
 
   tl.appendChild(nl);
@@ -2293,59 +2472,22 @@ document.getElementById('markets-grid').addEventListener('keydown', e => {
 
 
 // ─── PWA SERVICE WORKER ───────────────────────────────────────────
-// Registers an inline service worker via a Blob URL.
-// Caches the app shell on install; serves from cache on fetch.
-// Works even in a single-file HTML context with no separate SW file.
-if ('serviceWorker' in navigator) {
-  const swCode = `
-    const CACHE = 'tradehours-v1';
-    const ASSETS = [self.location.href]; // cache this HTML file
-
-    self.addEventListener('install', e => {
-      e.waitUntil(
-        caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting())
-      );
-    });
-
-    self.addEventListener('activate', e => {
-      e.waitUntil(
-        caches.keys().then(keys =>
-          Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
-        ).then(() => self.clients.claim())
-      );
-    });
-
-    self.addEventListener('fetch', e => {
-      // Network-first for same-origin; cache fallback for offline
-      if (e.request.url.startsWith(self.location.origin)) {
-        e.respondWith(
-          fetch(e.request)
-            .then(res => {
-              const clone = res.clone();
-              caches.open(CACHE).then(c => c.put(e.request, clone));
-              return res;
-            })
-            .catch(() => caches.match(e.request))
-        );
-      }
-    });
-  `;
-  const blob = new Blob([swCode], { type: 'application/javascript' });
-  const swUrl = URL.createObjectURL(blob);
-  navigator.serviceWorker.register(swUrl, { type: 'classic' })
-    .then(() => URL.revokeObjectURL(swUrl))
-    .catch(() => {}); // fail silently — app works without SW
+// Browsers only accept a service worker from a real same-origin file (not a
+// blob: URL), and only over http(s). Opened from disk, the app still works;
+// it just isn't installable.
+if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 
 // ─── WEEKEND DETECTION ────────────────────────────────────────────
 function updateWeekendState() {
-  const dow = new Date().getUTCDay(); // 0=Sun, 6=Sat
-  const isWeekend = dow === 0 || dow === 6;
   const grid = document.getElementById('markets-grid');
-  if (grid) grid.classList.toggle('is-weekend', isWeekend);
+  const times = allMarkets.map(m => getMarketTimesNow(m));
+  const allWeekend = times.length > 0 && times.every(t => t.status === 'weekend');
+  if (grid) grid.classList.toggle('is-weekend', allWeekend);
 
   let banner = document.getElementById('weekend-banner');
-  if (isWeekend) {
+  if (allWeekend) {
     if (!banner) {
       banner = document.createElement('div');
       banner.id = 'weekend-banner';
@@ -2353,10 +2495,20 @@ function updateWeekendState() {
       banner.setAttribute('aria-live', 'polite');
       grid.parentElement.insertBefore(banner, grid);
     }
-    const dayName = dow === 6 ? 'Saturday' : 'Sunday';
-    banner.textContent = `${dayName} — Global markets closed · Opens Monday`;
+    banner.textContent = 'Weekend · all your markets are closed · see each card for its next open';
   } else if (banner) {
     banner.remove();
+  }
+
+  // Holiday calendar coverage notice
+  const note = document.getElementById('holiday-coverage');
+  if (note) {
+    const year = new Date().getUTCFullYear();
+    const stale = year > HOLIDAY_YEARS.to;
+    note.textContent = stale
+      ? `Holiday calendar ends ${HOLIDAY_YEARS.to}: holidays after that are not shown`
+      : `Holidays and early closes: ${HOLIDAY_YEARS.from}–${HOLIDAY_YEARS.to}, from official exchange calendars`;
+    note.classList.toggle('is-stale', stale);
   }
 }
 

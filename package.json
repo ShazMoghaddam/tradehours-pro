@@ -1,0 +1,24 @@
+{
+  "name": "tradehours-pro",
+  "version": "2.1.0",
+  "private": true,
+  "description": "Live global market hours, session countdowns and exchange holidays for 25 markets, as an installable single-page web app.",
+  "author": "Shaz Moghaddam (https://shazmoghaddam.github.io/)",
+  "license": "MIT",
+  "homepage": "https://shazmoghaddam.github.io/tradehours-pro/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ShazMoghaddam/tradehours-pro.git"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test tests/smoke.mjs",
+    "build:assets": "node assets/build.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.65.1"
+  }
+}

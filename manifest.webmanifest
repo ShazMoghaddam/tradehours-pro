@@ -1,0 +1,13 @@
+{
+  "name": "TradeHours Pro",
+  "short_name": "TradeHours",
+  "description": "Live global market hours, session countdowns and exchange holidays.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0f1318",
+  "theme_color": "#0f1318",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
